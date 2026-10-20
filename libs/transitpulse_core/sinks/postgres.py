@@ -30,7 +30,11 @@ from psycopg import sql
 from psycopg_pool import ConnectionPool
 
 from transitpulse_core.config import Settings, get_settings
-from transitpulse_core.models import EnrichedVehicleEvent, QuarantineRecord
+from transitpulse_core.models import (
+    EnrichedVehicleEvent,
+    QuarantineReason,
+    QuarantineRecord,
+)
 from transitpulse_core.sinks import WriteResult
 from transitpulse_core.telemetry import get_metrics, get_tracer
 
@@ -83,6 +87,15 @@ class PostgresSink:
             # hold a stale socket after Cloud SQL restarts underneath it.
             max_lifetime=30 * 60.0,
         )
+        # Declared at zero rather than created on first use. An unincremented
+        # counter has no series at all, and "no series" renders on a dashboard
+        # exactly like zero while meaning something entirely different -- a
+        # quiet pipeline is indistinguishable from a processor that never
+        # started. Every value these two labels can take is known up front, so
+        # the panels can show a real zero from the moment a process boots.
+        self._metrics.events_deduped.add(0, {"sink": self.name})
+        for reason in QuarantineReason:
+            self._metrics.events_quarantined.add(0, {"reason": str(reason)})
 
     @property
     def pool(self) -> ConnectionPool:

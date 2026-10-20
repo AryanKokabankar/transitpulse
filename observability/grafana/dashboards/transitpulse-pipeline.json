@@ -1,5 +1,5 @@
 {
-  "__comment": "Committed to git on purpose: a reviewer can see what the pipeline measures without running anything. Colors are the project palette, assigned by the job each one does - lag percentiles are ORDERED magnitude so they use one blue ramp light-to-dark (never three unrelated hues), sinks are categorical identity (blue/orange, fixed order), and SLO/DLQ tiles use the reserved status palette with the numeric value always visible beside the color. No panel uses two y-axes.",
+  "__comment": "Committed to git on purpose: a reviewer can see what the pipeline measures without running anything. Colors are the project palette, assigned by the job each one does - lag percentiles are ORDERED magnitude so they use one blue ramp light-to-dark (never three unrelated hues), sinks are categorical identity (blue/orange, fixed order), and the SLO, dead-letter, partition-headroom and job-freshness tiles use the reserved status palette with the numeric value always visible beside the color. No panel uses two y-axes. Every quantile and the SLI itself read recording rules from observability/prometheus/rules/ rather than recomputing histogram_quantile on each refresh, which also means the objective is defined in exactly one place - the same series the alert rules page on.",
   "title": "TransitPulse / Pipeline Health",
   "uid": "transitpulse-pipeline",
   "schemaVersion": 39,
@@ -28,11 +28,11 @@
   "annotations": {
     "list": [
       {
-        "name": "Deploys",
+        "name": "Process starts",
         "enable": true,
         "iconColor": "#898781",
         "datasource": { "type": "prometheus", "uid": "Prometheus" },
-        "expr": "changes(transitpulse_build_info[1m]) > 0"
+        "expr": "min by (service_name) (time() - transitpulse_service_start_timestamp_seconds) < 120"
       }
     ]
   },
@@ -55,7 +55,7 @@
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "100 * sum(rate(transitpulse_ingest_lag_seconds_bucket{le=\"2\"}[5m])) / clamp_min(sum(rate(transitpulse_ingest_lag_seconds_count[5m])), 1e-9)",
+          "expr": "100 * transitpulse:ingest_lag:within_objective_ratio5m",
           "legendFormat": "within SLO"
         }
       ],
@@ -96,7 +96,7 @@
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(transitpulse_ingest_lag_seconds_bucket[5m])))",
+          "expr": "transitpulse:ingest_lag_seconds:p95",
           "legendFormat": "p95 lag"
         }
       ],
@@ -157,16 +157,16 @@
     {
       "id": 4,
       "type": "stat",
-      "title": "Dead-letter queue depth",
-      "description": "Messages parked in the DLQ awaiting replay. Any sustained non-zero value means the replayer job needs to run.",
+      "title": "Events dead-lettered (10m)",
+      "description": "Events that exhausted all five delivery attempts and could not be quarantined either, so only the DLQ holds them. Was a broker-side depth gauge, which no process in this repo could observe - see ADR-007. Any non-zero value is a durability failure, so the threshold is red at one rather than at a hundred.",
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
       "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 },
       "targets": [
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "sum(transitpulse_dlq_depth)",
-          "legendFormat": "in DLQ"
+          "expr": "sum(increase(transitpulse_events_dead_lettered_total[10m]))",
+          "legendFormat": "dead-lettered"
         }
       ],
       "fieldConfig": {
@@ -178,8 +178,7 @@
             "mode": "absolute",
             "steps": [
               { "color": "#0ca30c", "value": null },
-              { "color": "#fab219", "value": 1 },
-              { "color": "#d03b3b", "value": 100 }
+              { "color": "#d03b3b", "value": 1 }
             ]
           }
         },
@@ -193,9 +192,70 @@
       }
     },
     {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Error budget burn rate",
+      "description": "Multiples of the sustainable spend of the 1% error budget. 1x exhausts a 30-day budget in exactly 30 days; the dashed lines are the two rates that page. Both series are the same quantity over different windows - an ordered family, so one blue ramp light-to-dark with the short window light, rather than two unrelated hues.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 6 },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "transitpulse:ingest_lag:burn_rate1h",
+          "legendFormat": "1h window"
+        },
+        {
+          "refId": "B",
+          "editorMode": "code",
+          "expr": "transitpulse:ingest_lag:burn_rate6h",
+          "legendFormat": "6h window"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1,
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisGridShow": true,
+            "axisSoftMax": 16,
+            "thresholdsStyle": { "mode": "dashed" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "transparent", "value": null },
+              { "color": "#fab219", "value": 6 },
+              { "color": "#d03b3b", "value": 14.4 }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "1h window" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#86b6ef" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "6h window" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#104281" } }]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull", "max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
       "type": "row",
       "title": "Latency",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 },
       "collapsed": false,
       "panels": []
     },
@@ -205,24 +265,24 @@
       "title": "Ingest lag percentiles",
       "description": "p50 / p95 / p99 of processed_time - event_time. One blue ramp light-to-dark because these are ordered magnitudes of the same measure, not independent series. The dashed 2s line is the objective.",
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 7 },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 14 },
       "targets": [
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum by (le) (rate(transitpulse_ingest_lag_seconds_bucket[5m])))",
+          "expr": "transitpulse:ingest_lag_seconds:p50",
           "legendFormat": "p50"
         },
         {
           "refId": "B",
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(transitpulse_ingest_lag_seconds_bucket[5m])))",
+          "expr": "transitpulse:ingest_lag_seconds:p95",
           "legendFormat": "p95"
         },
         {
           "refId": "C",
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(transitpulse_ingest_lag_seconds_bucket[5m])))",
+          "expr": "transitpulse:ingest_lag_seconds:p99",
           "legendFormat": "p99"
         }
       ],
@@ -272,12 +332,12 @@
       "title": "Sink write latency p95",
       "description": "Per-sink write latency. Postgres is the synchronous serving write; BigQuery is the batched append. Two independent sinks, so categorical slots 1 and 2.",
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 7 },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 14 },
       "targets": [
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, sink) (rate(transitpulse_sink_write_duration_seconds_bucket[5m])))",
+          "expr": "transitpulse:sink_write_seconds:p95",
           "legendFormat": "{{sink}}"
         }
       ],
@@ -314,7 +374,7 @@
     {
       "type": "row",
       "title": "Data quality",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
       "collapsed": false,
       "panels": []
     },
@@ -324,7 +384,7 @@
       "title": "Quarantined events by reason",
       "description": "Events the pipeline refused, split by why. Categorical identity, so hues are assigned in fixed palette order and a reason keeps its color even when others drop out of the window.",
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 17 },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 24 },
       "targets": [
         {
           "refId": "A",
@@ -392,7 +452,7 @@
       "title": "Delivery outcome rate",
       "description": "Processed, deduplicated and quarantined events per second. Deduplicated is a success - the agency re-sending a ping it already sent is normal traffic, not loss - so it is tracked separately from quarantine.",
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 17 },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 24 },
       "targets": [
         {
           "refId": "A",
@@ -449,7 +509,7 @@
     {
       "type": "row",
       "title": "Upstream and internals",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 26 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 33 },
       "collapsed": false,
       "panels": []
     },
@@ -459,12 +519,12 @@
       "title": "Upstream feed fetch p95",
       "description": "How long the agency takes to answer. Single series, so the title names it and no legend box is needed.",
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 27 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 34 },
       "targets": [
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(transitpulse_feed_fetch_duration_seconds_bucket[5m])))",
+          "expr": "transitpulse:feed_fetch_seconds:p95",
           "legendFormat": "p95 fetch"
         }
       ],
@@ -489,7 +549,7 @@
       "title": "Upstream feed failures",
       "description": "Fetch errors by kind. Rising values here with flat quarantine means the circuit breaker is doing its job.",
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 27 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 34 },
       "targets": [
         {
           "refId": "A",
@@ -531,12 +591,12 @@
       "title": "Processor handler duration p99",
       "description": "Time inside the processor itself, excluding broker and network. Compare against ingest lag to see whether latency is ours or upstream's.",
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 27 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 34 },
       "targets": [
         {
           "refId": "A",
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum by (le) (rate(transitpulse_processing_duration_seconds_bucket[5m])))",
+          "expr": "transitpulse:processing_seconds:p99",
           "legendFormat": "p99 handler"
         }
       ],
@@ -553,6 +613,141 @@
       "options": {
         "legend": { "showLegend": false },
         "tooltip": { "mode": "single", "sort": "none" }
+      }
+    },
+    {
+      "type": "row",
+      "title": "Capacity and scheduled jobs",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 42 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Partition headroom (days)",
+      "description": "Unbroken days of vehicle_events partitions from today onward. Partitioning does not degrade when it runs out - it refuses the insert - so this is write capacity, not disk. Zero means tomorrow is rejected; -1 means today already is. Status palette, red below the three-day threshold the alert pages on.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 43 },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "min by (table) (transitpulse_partitions_headroom_days)",
+          "legendFormat": "{{table}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "#d03b3b", "value": null },
+              { "color": "#fab219", "value": 3 },
+              { "color": "#0ca30c", "value": 7 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "area",
+        "colorMode": "value",
+        "textMode": "value_and_name",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Time since each job last succeeded",
+      "description": "Age of the last successful run, per job. This is the signal that would have caught the partition outage a fortnight before the headroom did: a job that stopped being triggered produces no failures to notice, only an absence. Amber at 26h, which is a daily schedule plus slack.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 6, "w": 9, "x": 6, "y": 43 },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "time() - max by (job_name) (transitpulse_job_last_success_timestamp_seconds)",
+          "legendFormat": "{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "#0ca30c", "value": null },
+              { "color": "#fab219", "value": 93600 },
+              { "color": "#d03b3b", "value": 172800 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value_and_name",
+        "justifyMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Partitions ensured and dropped",
+      "description": "What the maintenance job did, over the last hour. Created and dropped are independent outcomes rather than magnitudes of one measure, so they take categorical slots 1 and 2 in fixed order. Both sitting at zero is the healthy steady state, which is why the counters are declared at zero rather than created on first use.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 6, "w": 9, "x": 15, "y": 43 },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "sum(increase(transitpulse_partitions_ensured_total[1h]))",
+          "legendFormat": "ensured"
+        },
+        {
+          "refId": "B",
+          "editorMode": "code",
+          "expr": "sum(increase(transitpulse_partitions_dropped_total[1h]))",
+          "legendFormat": "dropped"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisSoftMax": 2
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "ensured" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#2a78d6" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "dropped" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#eb6834" } }]
+          }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
       }
     }
   ]

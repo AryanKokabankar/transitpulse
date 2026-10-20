@@ -113,6 +113,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     _feed_client = FeedClient(settings)
     _publisher = EventPublisher(settings)
     _archive = build_snapshot_archive(settings)
+    # Declared at zero per failure kind, so "the agency is fine" is visible as
+    # zero rather than as an empty panel. See PostgresSink.__init__.
+    failures = get_metrics().feed_fetch_failures
+    for kind in FeedFailureKind:
+        failures.add(0, {"agency": settings.feed_agency, "kind": str(kind)})
     log.info(
         "collector.ready",
         agency=settings.feed_agency,

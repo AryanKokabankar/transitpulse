@@ -10,11 +10,23 @@ message is accepted and the subscriber's span starts fresh, leaving two
 unrelated traces. Carrying the W3C ``traceparent`` in the message *attributes*
 stitches them into one trace, so a single waterfall covers
 fetch -> decode -> publish -> consume -> enrich -> Postgres -> BigQuery.
+
+Instrument names here are *not* the names queries are written against. The
+Collector's Prometheus exporter rewrites every one of them: dots become
+underscores, a monotonic counter gains ``_total``, and the ``unit`` gains a
+suffix of its own -- ``s`` becomes ``_seconds`` and ``d`` becomes ``_days``. So
+``transitpulse.ingest.lag`` with ``unit="s"`` is queried as
+``transitpulse_ingest_lag_seconds_bucket``, and changing a unit here silently
+renames a series and empties a dashboard panel. The rule is written down in
+``tests/unit/test_dashboard_contract.py``, which derives every name this
+registry can produce and fails if a panel queries anything else, and checked
+against a live Collector by ``tests/integration/test_dashboard_panels.py``.
 """
 
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import MutableMapping
 from dataclasses import dataclass
 from functools import lru_cache
@@ -25,7 +37,23 @@ from opentelemetry import metrics, trace
 from opentelemetry.context import Context
 from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.metrics import Counter, Histogram, UpDownCounter
+from opentelemetry.metrics import (
+    CallbackOptions,
+    Counter,
+    Histogram,
+    Meter,
+    ObservableGauge,
+    Observation,
+    UpDownCounter,
+)
+from opentelemetry.metrics import (
+    # The synchronous gauge is still marked experimental in the OTel Python
+    # API, so its only exported name is underscore-prefixed. Aliased here
+    # rather than spelled out at each annotation: the instrument is stable in
+    # the metrics data model, and this is the one line to revisit when the API
+    # promotes it.
+    _Gauge as Gauge,
+)
 from opentelemetry.propagate import extract, inject
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import (
@@ -46,6 +74,23 @@ _DURATION_BUCKETS = [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 
 
 _INSTRUMENTATION_NAME = "transitpulse"
 
+# Read once at import, so every observation of it reports the same instant
+# whatever the clock does afterwards.
+_PROCESS_START = time.time()
+
+
+def _observe_start_time(_options: CallbackOptions) -> list[Observation]:
+    """Re-report this process's start time on every metric collection.
+
+    An *observable* gauge rather than a value set once at bootstrap, because a
+    synchronous gauge is only exported in the collection cycle that follows the
+    ``set()``. Nothing sets this one again, so after that single export the
+    series would stop being sent, the Collector would expire it, and the
+    "something restarted" annotation would quietly have no data to draw from --
+    the exact failure mode this phase exists to remove.
+    """
+    return [Observation(_PROCESS_START)]
+
 
 @dataclass(frozen=True)
 class Metrics:
@@ -64,17 +109,34 @@ class Metrics:
     events_quarantined: Counter
     events_deduped: Counter
     events_published: Counter
+    events_dead_lettered: Counter
     feed_fetch_failures: Counter
-    dlq_depth: UpDownCounter
     inflight_batches: UpDownCounter
     partitions_ensured: Counter
     partitions_dropped: Counter
+    partition_headroom: Gauge
+    job_last_success: Gauge
+    # Callback-driven, so nothing calls it -- held here only to keep it alive.
+    # An ObservableGauge dropped by the garbage collector stops being observed.
+    service_start: ObservableGauge
 
 
 @lru_cache(maxsize=1)
 def get_metrics() -> Metrics:
-    """Build the instrument registry once per process."""
-    meter = metrics.get_meter(_INSTRUMENTATION_NAME)
+    """The process-wide instrument registry, built once."""
+    return build_metrics(metrics.get_meter(_INSTRUMENTATION_NAME))
+
+
+def build_metrics(meter: Meter) -> Metrics:
+    """Create every instrument against a given meter.
+
+    Takes the meter rather than reaching for the global provider so that the
+    registry can be built against an in-memory reader and inspected. The names
+    and units here are the sole input to the series names every dashboard panel
+    and alert rule is written against, and the global provider can only be set
+    once per process -- which would leave the one thing most worth checking
+    uncheckable without a subprocess.
+    """
     return Metrics(
         ingest_lag=meter.create_histogram(
             "transitpulse.ingest.lag",
@@ -117,13 +179,13 @@ def get_metrics() -> Metrics:
             "transitpulse.events.published",
             description="Events published to Pub/Sub by the collector",
         ),
+        events_dead_lettered=meter.create_counter(
+            "transitpulse.events.dead_lettered",
+            description="Events whose last delivery attempt was refused, labelled by reason",
+        ),
         feed_fetch_failures=meter.create_counter(
             "transitpulse.feed.fetch.failures",
             description="Upstream feed errors, labelled by kind",
-        ),
-        dlq_depth=meter.create_up_down_counter(
-            "transitpulse.dlq.depth",
-            description="Messages currently parked in the dead-letter queue",
         ),
         inflight_batches=meter.create_up_down_counter(
             "transitpulse.sink.inflight_batches",
@@ -137,7 +199,39 @@ def get_metrics() -> Metrics:
             "transitpulse.partitions.dropped",
             description="Daily partitions dropped past the retention window",
         ),
+        partition_headroom=meter.create_gauge(
+            "transitpulse.partitions.headroom",
+            unit="d",
+            description="Unbroken days of partitions from today onward; write capacity",
+        ),
+        job_last_success=meter.create_gauge(
+            "transitpulse.job.last_success_timestamp",
+            unit="s",
+            description="Unix time a scheduled job last finished successfully",
+        ),
+        service_start=meter.create_observable_gauge(
+            "transitpulse.service.start_timestamp",
+            unit="s",
+            description="Unix time this process started",
+            callbacks=[_observe_start_time],
+        ),
     )
+
+
+def record_job_success(job_name: str) -> None:
+    """Stamp a scheduled job's completion time, for freshness alerting.
+
+    The label is ``job_name`` and not ``job``: the Collector's Prometheus
+    exporter already writes a ``job`` label (the scrape job), and a colliding
+    attribute would be silently renamed to ``exported_job``, so every query
+    written against ``job`` would match nothing.
+
+    What this guards against is a job that stops running rather than one that
+    fails -- a crashing job is loud, a job whose schedule was never wired up is
+    not, and a partition job that silently stopped is how this pipeline came to
+    refuse every insert mid-development.
+    """
+    get_metrics().job_last_success.set(time.time(), {"job_name": job_name})
 
 
 def get_tracer() -> trace.Tracer:

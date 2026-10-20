@@ -30,6 +30,7 @@ import argparse
 import json
 import sys
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 
@@ -38,7 +39,12 @@ import structlog
 from psycopg import sql
 
 from transitpulse_core.config import Settings, get_settings
-from transitpulse_core.telemetry import get_metrics, get_tracer, setup_telemetry
+from transitpulse_core.telemetry import (
+    get_metrics,
+    get_tracer,
+    record_job_success,
+    setup_telemetry,
+)
 
 SERVICE_NAME = "transitpulse-partition-maintenance"
 
@@ -72,6 +78,7 @@ class Outcome:
     retained: list[str] = field(default_factory=list)
     dry_run: bool = False
     seconds: float = 0.0
+    headroom_days: int = 0
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -81,6 +88,7 @@ class Outcome:
             "dropped": self.dropped,
             "dropped_count": len(self.dropped),
             "retained_count": len(self.retained),
+            "headroom_days": self.headroom_days,
             "dry_run": self.dry_run,
             "seconds": round(self.seconds, 3),
         }
@@ -108,6 +116,36 @@ def build_plan(today: date, *, ahead_days: int, retention_days: int) -> Plan:
         ensure_days=ensure_days,
         drop_before=today - timedelta(days=retention_days),
     )
+
+
+def headroom_days(partition_days: Iterable[date], today: date) -> int:
+    """Days of write capacity left: the *unbroken* run of days from today on.
+
+    This is the number whose absence cost a development day. Partitions ran
+    out mid-development and every insert started failing with ``no partition of
+    relation "vehicle_events" found for row``; nothing anywhere reported the
+    window shrinking, because "how much runway is left" was never measured --
+    only "did today's run create anything", which stayed reassuringly true
+    right up to the last partition.
+
+    Contiguous rather than "furthest partition minus today", which is the
+    obvious reading and is wrong: a single stray partition dated years ahead --
+    left behind by a test, or created by hand during an incident -- makes the
+    furthest-day arithmetic report years of runway over a gap that refuses
+    every insert the moment the real window ends. Measured against this
+    database the two answers were 14 days and 1,209.
+
+    ``-1`` means today itself has no partition, so inserts are already being
+    refused rather than about to be. ``0`` means today is covered and tomorrow
+    is not.
+    """
+    days = set(partition_days)
+    if today not in days:
+        return -1
+    ahead = 0
+    while today + timedelta(days=ahead + 1) in days:
+        ahead += 1
+    return ahead
 
 
 def partition_day(relname: str) -> date | None:
@@ -199,10 +237,12 @@ def apply_plan(conn: psycopg.Connection, plan: Plan, *, dry_run: bool = False) -
         outcome.dropped.append(name)
 
     if not dry_run:
-        if outcome.created:
-            metrics.partitions_ensured.add(len(outcome.created))
-        if outcome.dropped:
-            metrics.partitions_dropped.add(len(outcome.dropped))
+        # Added unconditionally, including zero: a run that created nothing is
+        # the normal, healthy case, and skipping the call would leave the
+        # series absent so the panel reads "No data" on exactly the days
+        # nothing was wrong.
+        metrics.partitions_ensured.add(len(outcome.created))
+        metrics.partitions_dropped.add(len(outcome.dropped))
 
     return outcome
 
@@ -238,10 +278,20 @@ def run(
         # discards the first eleven, and partial progress beats none.
         with psycopg.connect(settings.pg_dsn_str, autocommit=True) as conn:
             outcome = apply_plan(conn, plan, dry_run=dry_run)
+            # Re-read rather than deriving the headroom from the plan: a run
+            # that meant to guarantee a fortnight and failed on day three has
+            # three days of runway, not fourteen, and the plan cannot tell the
+            # difference. A dry run reports it too -- measuring the window is
+            # an observation, not a change.
+            outcome.headroom_days = headroom_days(existing_partitions(conn).values(), plan.today)
 
         outcome.seconds = time.perf_counter() - started
         span.set_attribute("partitions.created", len(outcome.created))
         span.set_attribute("partitions.dropped", len(outcome.dropped))
+        span.set_attribute("partitions.headroom_days", outcome.headroom_days)
+        get_metrics().partition_headroom.set(outcome.headroom_days, {"table": PARENT_TABLE})
+        if not dry_run:
+            record_job_success("partition_maintenance")
 
     log.info("partitions.maintained", **outcome.as_dict())
     return outcome
@@ -307,6 +357,7 @@ def main(argv: list[str] | None = None) -> int:
     for name in outcome.dropped:
         print(f"  - {name}")
     print(f"retained: {len(outcome.retained)}, already present: {len(outcome.existing)}")
+    print(f"headroom: {outcome.headroom_days} day(s) of write capacity")
     return 0
 
 

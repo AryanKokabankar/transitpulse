@@ -54,6 +54,11 @@ dev = [
     "testcontainers[postgres]>=4.8",
     "types-protobuf>=5.28",
     "freezegun>=1.5",
+    # Imported directly by tests/unit/test_dashboard_contract.py to read the
+    # Prometheus rule files and the Grafana datasource provisioning. Present
+    # transitively via uvicorn[standard] today, which is not a contract --
+    # declared for the same reason python-dotenv is, below.
+    "PyYAML>=6.0",
     # Imported directly by tests/conftest.py to load the non-TP_ variables
     # (PUBSUB_EMULATOR_HOST, OTEL_*) that the Google and OTel SDKs read from
     # the environment. Declared explicitly rather than relied on as a

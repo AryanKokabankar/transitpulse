@@ -4,6 +4,13 @@ global:
   external_labels:
     env: local
 
+# Rules live beside this file and are mounted at the same path inside the
+# container. Globbed rather than listed one by one, so adding a rule group is a
+# new file and a reload rather than an edit in two places -- and so a file that
+# fails to parse fails the reload loudly instead of being quietly skipped.
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
 scrape_configs:
   # The collector re-exports everything the services pushed over OTLP.
   - job_name: otel-collector

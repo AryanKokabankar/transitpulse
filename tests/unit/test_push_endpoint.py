@@ -23,6 +23,8 @@ from typing import Any
 import orjson
 import pytest
 from fastapi.testclient import TestClient
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 
 from services.processor import enrich as enrich_module
 from services.processor import main as processor_main
@@ -34,6 +36,7 @@ from transitpulse_core.models import (
     VehiclePing,
 )
 from transitpulse_core.sinks import WriteResult
+from transitpulse_core.telemetry import build_metrics
 
 
 class StubSink:
@@ -392,3 +395,74 @@ class TestQuarantineWriteFailure:
     ) -> None:
         wire(monkeypatch, sink=StubSink(quarantine_error=True))
         assert client.post("/", content=b"not an envelope").status_code == 503
+
+
+def _recording_registry(monkeypatch: pytest.MonkeyPatch) -> InMemoryMetricReader:
+    """Point the handler at instruments whose values can be read back.
+
+    The suite runs with telemetry disabled, which leaves OpenTelemetry's proxy
+    meter in place: every ``add`` succeeds and is discarded. Since a provider
+    can only be installed once per process, the registry is built against a
+    local reader and substituted into the module instead.
+    """
+    reader = InMemoryMetricReader()
+    registry = build_metrics(MeterProvider(metric_readers=[reader]).get_meter("transitpulse"))
+    monkeypatch.setattr(processor_main, "get_metrics", lambda: registry)
+    return reader
+
+
+def _counter_points(reader: InMemoryMetricReader, name: str) -> list[Any]:
+    data = reader.get_metrics_data()
+    assert data is not None
+    return [
+        point
+        for resource in data.resource_metrics
+        for scope in resource.scope_metrics
+        for metric in scope.metrics
+        if metric.name == name
+        for point in metric.data.data_points
+    ]
+
+
+class TestDeadLetterAccounting:
+    """The one path by which this pipeline can lose an event.
+
+    It takes both failures at once: the message is on its final delivery
+    attempt *and* the quarantine write fails, so neither the sinks nor the
+    rejection table ends up holding it and only the dead-letter topic does.
+    Pub/Sub performs that move and reports it to nobody, so this counter is the
+    only place it becomes visible -- which is why the dashboard's original
+    broker-side "DLQ depth" gauge could never have had a value (ADR-007).
+    """
+
+    NAME = "transitpulse.events.dead_lettered"
+
+    def test_the_final_attempt_losing_its_quarantine_write_is_counted(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch, make_ping: MakePing
+    ) -> None:
+        reader = _recording_registry(monkeypatch)
+        wire(monkeypatch, sink=StubSink(write_error="boom", quarantine_error=True))
+
+        response = client.post("/", json=push_body(make_ping(), delivery_attempt=5))
+
+        assert response.status_code == 503, "the message must go back for the broker to park it"
+        points = [p for p in _counter_points(reader, self.NAME) if p.value]
+        assert [p.value for p in points] == [1]
+        assert points[0].attributes == {"reason": str(QuarantineReason.SINK_WRITE_FAILURE)}
+
+    def test_an_earlier_attempt_is_a_retry_and_is_not_counted(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch, make_ping: MakePing
+    ) -> None:
+        """Counting every nack would make the metric a retry rate.
+
+        A message on its second delivery whose database is down is not lost;
+        it has three attempts left. Alerting on that would page for every
+        transient blip, and the alert is written to fire on the first event.
+        """
+        reader = _recording_registry(monkeypatch)
+        wire(monkeypatch, sink=StubSink(write_error="boom", quarantine_error=True))
+
+        response = client.post("/", json=push_body(make_ping(), delivery_attempt=2))
+
+        assert response.status_code == 503
+        assert not [p for p in _counter_points(reader, self.NAME) if p.value]

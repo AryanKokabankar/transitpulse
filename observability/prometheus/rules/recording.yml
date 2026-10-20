@@ -1,0 +1,110 @@
+# Recording rules: the SLI, and the burn rate of its error budget.
+#
+# Two jobs. The first is cost: a dashboard that refreshes every ten seconds
+# recomputed three histogram quantiles over a 5-minute window on every refresh,
+# for every open browser tab. Recording them evaluates each one once per
+# interval no matter who is watching.
+#
+# The second is that it puts the SLO in one place. The objective appears here
+# as a bucket boundary and a budget fraction, and both the panels and the alert
+# rules read the recorded series -- so the objective cannot drift between the
+# tile claiming compliance and the rule that pages about it, which it would the
+# moment either expression were edited alone.
+#
+# THE le LITERAL IS MEASURED, NOT GUESSED. `le="2.0"`, not `le="2"`. The same
+# Collector endpoint reports the boundary differently depending on the format
+# negotiated: `le="2"` in Prometheus text format, which is what curl gets, and
+# `le="2.0"` in OpenMetrics, which is what Prometheus gets because the exporter
+# sets enable_open_metrics. The dashboard shipped with `le="2"` and the SLO tile
+# was empty from the day it was written. See ADR-007.
+#
+# NO clamp_min ON THE DENOMINATOR, deliberately. Guarding the division makes an
+# idle pipeline report 0% compliance rather than no figure at all, which is a
+# page for a system that is not doing anything wrong. Plain division yields NaN
+# on zero traffic, every comparison against NaN is false, and the alerts stay
+# quiet -- which is the correct behaviour and the reason the guard was removed.
+
+groups:
+  - name: transitpulse-sli
+    # No interval override: the global evaluation_interval of 15s is already
+    # three scrapes, and these expressions are cheap at local cardinality.
+    rules:
+      # --- latency distribution -------------------------------------------
+      # One ramp of the same measure, which is why the panel draws them in one
+      # colour family rather than three hues.
+      - record: transitpulse:ingest_lag_seconds:p50
+        expr: histogram_quantile(0.50, sum by (le) (rate(transitpulse_ingest_lag_seconds_bucket[5m])))
+      - record: transitpulse:ingest_lag_seconds:p95
+        expr: histogram_quantile(0.95, sum by (le) (rate(transitpulse_ingest_lag_seconds_bucket[5m])))
+      - record: transitpulse:ingest_lag_seconds:p99
+        expr: histogram_quantile(0.99, sum by (le) (rate(transitpulse_ingest_lag_seconds_bucket[5m])))
+
+      - record: transitpulse:sink_write_seconds:p95
+        expr: histogram_quantile(0.95, sum by (le, sink) (rate(transitpulse_sink_write_duration_seconds_bucket[5m])))
+      - record: transitpulse:processing_seconds:p99
+        expr: histogram_quantile(0.99, sum by (le) (rate(transitpulse_processing_duration_seconds_bucket[5m])))
+      - record: transitpulse:feed_fetch_seconds:p95
+        expr: histogram_quantile(0.95, sum by (le) (rate(transitpulse_feed_fetch_duration_seconds_bucket[5m])))
+
+      # --- the SLI ---------------------------------------------------------
+      # Share of events whose end-to-end lag breached the 2s objective. The
+      # ratio the dashboard shows is one minus this; the alerts want the bad
+      # share, because that is what the error budget is spent in.
+      - record: transitpulse:ingest_lag:breach_ratio5m
+        expr: |
+          1 - (
+            sum(rate(transitpulse_ingest_lag_seconds_bucket{le="2.0"}[5m]))
+            /
+            sum(rate(transitpulse_ingest_lag_seconds_count[5m]))
+          )
+      - record: transitpulse:ingest_lag:breach_ratio30m
+        expr: |
+          1 - (
+            sum(rate(transitpulse_ingest_lag_seconds_bucket{le="2.0"}[30m]))
+            /
+            sum(rate(transitpulse_ingest_lag_seconds_count[30m]))
+          )
+      - record: transitpulse:ingest_lag:breach_ratio1h
+        expr: |
+          1 - (
+            sum(rate(transitpulse_ingest_lag_seconds_bucket{le="2.0"}[1h]))
+            /
+            sum(rate(transitpulse_ingest_lag_seconds_count[1h]))
+          )
+      - record: transitpulse:ingest_lag:breach_ratio6h
+        expr: |
+          1 - (
+            sum(rate(transitpulse_ingest_lag_seconds_bucket{le="2.0"}[6h]))
+            /
+            sum(rate(transitpulse_ingest_lag_seconds_count[6h]))
+          )
+
+      - record: transitpulse:ingest_lag:within_objective_ratio5m
+        expr: 1 - transitpulse:ingest_lag:breach_ratio5m
+
+      # --- burn rate -------------------------------------------------------
+      # Multiples of the budget: the objective is 99% within 2s over 30 days,
+      # so the budget is 1% and a breach ratio of 1% is exactly 1x -- the rate
+      # that spends the whole budget in exactly 30 days and no faster. These
+      # read the recorded ratios above, which evaluate earlier in this group.
+      - record: transitpulse:ingest_lag:burn_rate5m
+        expr: transitpulse:ingest_lag:breach_ratio5m / 0.01
+      - record: transitpulse:ingest_lag:burn_rate30m
+        expr: transitpulse:ingest_lag:breach_ratio30m / 0.01
+      - record: transitpulse:ingest_lag:burn_rate1h
+        expr: transitpulse:ingest_lag:breach_ratio1h / 0.01
+      - record: transitpulse:ingest_lag:burn_rate6h
+        expr: transitpulse:ingest_lag:breach_ratio6h / 0.01
+
+      # --- data quality ----------------------------------------------------
+      # Rejections as a share of everything the processor reached a verdict on.
+      # A rate alone cannot distinguish a feed that went bad from a feed that
+      # got busy, and the first is an incident while the second is a Tuesday.
+      - record: transitpulse:quarantine:ratio5m
+        expr: |
+          sum(rate(transitpulse_events_quarantined_total[5m]))
+          /
+          (
+            sum(rate(transitpulse_events_quarantined_total[5m]))
+            + sum(rate(transitpulse_events_processed_total[5m]))
+          )

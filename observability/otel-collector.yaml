@@ -37,7 +37,20 @@ exporters:
     # Keep OTel resource attributes as labels so panels can split by service.
     resource_to_telemetry_conversion:
       enabled: true
+    # Note for anyone writing a query against this endpoint: with OpenMetrics
+    # on, histogram bucket boundaries are served as `le="2.0"` to Prometheus
+    # and as `le="2"` to a plain curl. The two disagree, Prometheus stores the
+    # OpenMetrics spelling, and a matcher written from what curl showed matches
+    # nothing. See ADR-007.
     enable_open_metrics: true
+    # Five minutes by default, which erases exactly the signals that matter
+    # most. The partition job and the GTFS loader run once and exit, so each
+    # exports its headroom gauge and success timestamp a single time; at the
+    # default they vanish from the dashboard minutes later and the freshness
+    # alert loses the series it is meant to be watching. Raised to an hour so
+    # a local session can see them. The cloud deployment has no equivalent
+    # shim and needs none -- Cloud Monitoring keeps the point that was written.
+    metric_expiration: 1h
   debug:
     verbosity: basic
 

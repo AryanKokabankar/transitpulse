@@ -1,0 +1,260 @@
+# Alert rules for the failure modes this pipeline has actually hit or designed
+# for. Nothing here is speculative monitoring: each rule names the thing that
+# went wrong, or the thing the architecture deliberately leaves able to go
+# wrong, and every annotation says what an operator should do about it.
+#
+# Where a number is derived, the comment says what from. Where a number is a
+# guess, the comment says that it is a guess -- there is no production traffic
+# to derive a quarantine rate or a page-worthy failure rate from, and dressing
+# a round number up as a measurement would be worse than admitting it.
+#
+# Severity is a routing decision, not a mood: `page` means a human is woken,
+# `ticket` means it waits for business hours. Phase 4 maps these onto Cloud
+# Monitoring notification channels; locally they are labels on a rule.
+
+groups:
+  # ---------------------------------------------------------------------
+  # The SLO: 99% of events ingested within 2s of the agency's event time.
+  #
+  # Two windows, both required to fire together, which is the standard
+  # multi-window multi-burn-rate shape: the long window establishes that
+  # enough budget is genuinely being spent to care about, and the short one
+  # establishes that it is still happening now rather than an hour ago. Either
+  # alone is a known-bad alert -- the long window alone keeps paging long after
+  # recovery, the short window alone pages for every transient spike.
+  #
+  # The 14.4x/1h and 6x/6h pairs are the Google SRE workbook's standard table
+  # for a 30-day budget, not something measured here: 14.4x exhausts a 30-day
+  # budget in about two days, 6x in about five. They are a convention worth
+  # inheriting rather than re-deriving.
+  #
+  # The workbook's slower pairs (3x over 1d, 1x over 3d) are deliberately
+  # absent. Local Prometheus retains 6h, so a 1d window cannot be computed at
+  # all here and a rule that silently never fires is worse than no rule.
+  # Phase 4 adds them in Cloud Monitoring, where the retention exists.
+  # ---------------------------------------------------------------------
+  - name: transitpulse-slo
+    rules:
+      - alert: TransitPulseIngestLagBurnFast
+        expr: |
+          transitpulse:ingest_lag:burn_rate1h >= 14.4
+          and transitpulse:ingest_lag:burn_rate5m >= 14.4
+        for: 2m
+        labels:
+          severity: page
+          slo: ingest_lag
+        annotations:
+          summary: "Ingest-lag error budget burning at {{ $value | printf \"%.1f\" }}x"
+          description: >-
+            More than 14.4x the sustainable share of events are taking longer
+            than 2s end to end, and have been for the last hour. At this rate
+            the 30-day budget is gone in about two days.
+          runbook: >-
+            Check "Ingest lag percentiles" against "Processor handler duration
+            p99" first. If handler duration is flat and lag is climbing, the
+            time is being spent before the processor -- look at the broker
+            backlog and whether the collector is publishing at all. If handler
+            duration is climbing with it, look at "Sink write latency p95":
+            Postgres is the synchronous write and the usual cause is a
+            saturated connection pool or a partition that was just created and
+            has no statistics yet.
+
+      - alert: TransitPulseIngestLagBurnSlow
+        expr: |
+          transitpulse:ingest_lag:burn_rate6h >= 6
+          and transitpulse:ingest_lag:burn_rate30m >= 6
+        for: 15m
+        labels:
+          severity: page
+          slo: ingest_lag
+        annotations:
+          summary: "Ingest-lag error budget burning at {{ $value | printf \"%.1f\" }}x over 6h"
+          description: >-
+            A smaller but sustained overspend: 6x the sustainable rate for six
+            hours, which exhausts the 30-day budget in about five days. This is
+            the shape a slow regression makes rather than an outage.
+          runbook: >-
+            Compare the last six hours against the same window yesterday before
+            changing anything -- at this burn rate the cause is usually a
+            deploy or a traffic change, not a fault. If a deploy lines up with
+            the start (the dashboard annotates process starts), that is the
+            first thing to look at.
+
+      - alert: TransitPulseIngestLagP95High
+        expr: transitpulse:ingest_lag_seconds:p95 > 2
+        for: 10m
+        labels:
+          severity: ticket
+          slo: ingest_lag
+        annotations:
+          summary: "Ingest lag p95 is {{ $value | printf \"%.1fs\" }}, objective is 2s"
+          description: >-
+            The objective stated as a latency rather than as a budget. This can
+            be true while the burn-rate alerts stay quiet, because a p95 just
+            over 2s breaches the objective for only a few percent of events --
+            which is exactly what the budget is for. It is a ticket, not a page.
+          runbook: >-
+            Worth investigating this week, not tonight. If it coincides with a
+            burn-rate alert, that one is the real signal and this is a
+            restatement of it.
+
+  # ---------------------------------------------------------------------
+  # Losing data, or about to.
+  # ---------------------------------------------------------------------
+  - name: transitpulse-durability
+    rules:
+      - alert: TransitPulseEventsDeadLettered
+        expr: sum(increase(transitpulse_events_dead_lettered_total[10m])) > 0
+        for: 0m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $value | printf \"%.0f\" }} event(s) dead-lettered in the last 10 minutes"
+          description: >-
+            An event exhausted all five delivery attempts AND could not be
+            written to the quarantine table, so neither the pipeline nor the
+            rejection record holds it -- only the dead-letter topic does. This
+            is the single path by which TransitPulse can lose an event, and it
+            requires the database to be unreachable on the final attempt.
+          runbook: >-
+            Confirm Postgres is reachable first; the condition that produces
+            this almost always means it was not. Nothing is lost while the
+            messages sit in the DLQ, so the order is: restore the database,
+            confirm quarantine writes are succeeding again, then run the
+            dlq-replayer job. Do not purge the DLQ.
+          # Fires on the first event rather than after a sustained window: one
+          # dead-lettered event is already a durability failure, and the 10m
+          # increase window keeps the alert visible long enough to act on.
+
+      - alert: TransitPulseQuarantineRateSpike
+        expr: transitpulse:quarantine:ratio5m > 0.05
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of events are being rejected"
+          description: >-
+            A rising share of events is failing the data contract. Nothing is
+            lost -- every rejection is in the quarantine table with its raw
+            payload and trace id -- but a feed that has changed shape will keep
+            failing until someone looks.
+          runbook: >-
+            "Quarantined events by reason" names the cause. SCHEMA_VALIDATION
+            in bulk means the agency changed its feed; NULL_ISLAND means their
+            GPS is failing and there is nothing to fix here; IMPOSSIBLE_SPEED
+            in bulk usually means vehicle ids were reassigned upstream, so the
+            motion delta is comparing two different vehicles. Query the
+            quarantine table by reason and read a raw payload before changing
+            any validation.
+          # 5% IS A GUESS. There is no production traffic to derive a normal
+          # rejection rate from; the replay corpus rejects nothing at all, so
+          # even the local baseline is zero rather than informative. Revisit
+          # once the pipeline has run against a live feed for a week.
+
+  # ---------------------------------------------------------------------
+  # Upstream. The agency is not ours to fix, but knowing it broke is.
+  # ---------------------------------------------------------------------
+  - name: transitpulse-upstream
+    rules:
+      - alert: TransitPulseFeedCircuitOpen
+        expr: sum(rate(transitpulse_feed_fetch_failures_total{kind="circuit_open"}[5m])) > 0
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: "The upstream feed circuit breaker is open"
+          description: >-
+            Enough consecutive ticks failed that the collector has stopped
+            calling the agency at all and is failing fast until the cooldown
+            elapses. No data is arriving, and nothing downstream will report a
+            problem: an empty pipeline looks exactly like a quiet one, which is
+            why this alert exists on the collector side.
+          runbook: >-
+            Fetch the feed URL by hand. A 403 means the agency started
+            requiring a key (the MTA feed did exactly this); a timeout means
+            they are down and the breaker is behaving correctly, so wait. The
+            collector returns 503 with Retry-After while open, which Cloud
+            Scheduler honours, so there is nothing to restart.
+
+      - alert: TransitPulseFeedFailing
+        expr: sum(rate(transitpulse_feed_fetch_failures_total{kind!="circuit_open"}[5m])) > 0.05
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Upstream feed is failing {{ $value | printf \"%.2f\" }} times/sec"
+          description: >-
+            Fetches are failing but not yet consistently enough to open the
+            breaker, so data is still arriving with gaps. Retries are absorbing
+            it; this is the warning before TransitPulseFeedCircuitOpen.
+          runbook: >-
+            Check "Upstream feed failures" for the kind. Sustained timeout with
+            no http_error usually means the agency is overloaded rather than
+            broken, and the retry budget is already handling it.
+          # 0.05/sec IS A GUESS, chosen as "roughly one failure per 20 seconds",
+          # which with a 15s scheduler tick is most ticks failing. It is not
+          # derived from an observed failure distribution, because there is
+          # none yet.
+
+  # ---------------------------------------------------------------------
+  # Capacity. This group exists because of a real outage, not a hypothesis:
+  # mid-development the daily partitions of vehicle_events ran out and every
+  # insert began failing with `no partition of relation "vehicle_events" found
+  # for row`. There was no signal at all -- the maintenance job reported
+  # success because it had nothing left to create, and the only symptom was
+  # the processor nacking everything.
+  # ---------------------------------------------------------------------
+  - name: transitpulse-capacity
+    rules:
+      - alert: TransitPulsePartitionHeadroomLow
+        # min, not max: if any reporter says the runway is short, believe it.
+        # Each job run exports under a fresh instance label, so several
+        # measurements can be live at once inside the Collector's expiry
+        # window, and the pessimistic one is the safe one to act on.
+        expr: min by (table) (transitpulse_partitions_headroom_days) < 3
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.table }} has {{ $value }} day(s) of partitions left"
+          description: >-
+            Declarative range partitioning does not degrade when it runs out of
+            partitions, it refuses the insert. At 0 days, tomorrow's events are
+            rejected; at -1, today's already are.
+          runbook: >-
+            Run the partition job: `python tasks.py partitions`, or the
+            partition_maintenance Cloud Run Job. It is idempotent and takes
+            under a second. Then find out why it stopped running -- the job
+            recovering the window does not fix the schedule that failed to
+            trigger it, and this will happen again in two weeks.
+          # 3 days is chosen to be longer than a weekend, so a Friday-night
+          # failure is paged before Monday morning. The normal value is
+          # TP_PARTITION_AHEAD_DAYS (14), so this fires only after roughly a
+          # fortnight of the job not running.
+
+      - alert: TransitPulsePartitionJobStale
+        expr: |
+          time() - max(transitpulse_job_last_success_timestamp_seconds{job_name="partition_maintenance"}) > 93600
+        for: 0m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Partition maintenance last succeeded {{ $value | humanizeDuration }} ago"
+          description: >-
+            The headroom alert catches the consequence; this catches the cause,
+            roughly a fortnight earlier. A job that stopped being triggered is
+            silent -- there is no failing run to notice, only an absence.
+          runbook: >-
+            Check the Cloud Scheduler trigger and the job's last execution
+            before re-running it by hand, because a manual run resets this
+            alert without fixing anything.
+          # 93600s is 26 hours: the job's daily schedule plus two hours of
+          # slack for a late or slow run.
+          #
+          # This rule can only fire while the series still exists. The
+          # Collector expires a metric nothing is re-sending, and a one-shot
+          # job sends this once, so a job that has been dead for longer than
+          # the expiry window disappears instead of alerting -- absence, which
+          # local Prometheus cannot cleanly distinguish from a stack that only
+          # just started. In GCP the written point persists and Phase 4 adds
+          # the absence condition. See ADR-007.

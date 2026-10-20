@@ -1,7 +1,7 @@
 # Linux/CI equivalent of tasks.py. Both exist because the project is developed
 # on Windows (no make) and built in CI on Linux (no reason not to use make).
 .DEFAULT_GOAL := help
-.PHONY: help bootstrap up down nuke ps migrate topology capture replay lint fmt typecheck test test-integration check build
+.PHONY: help bootstrap up down nuke ps migrate topology capture replay bridge smoke partitions lint fmt typecheck test test-integration check build
 
 PY ?= python
 
@@ -34,6 +34,15 @@ capture: ## Archive one feed snapshot into the replay corpus
 
 replay: ## Replay the corpus (ARGS="--rate 500 --duration 10s")
 	$(PY) tasks.py replay $(ARGS)
+
+bridge: ## Deliver published messages to the processor (ARGS="--duration 30s")
+	$(PY) tasks.py bridge $(ARGS)
+
+smoke: ## Provoke every metric the dashboard and alert rules read
+	$(PY) tasks.py smoke $(ARGS)
+
+partitions: ## Maintain vehicle_events partitions and report the headroom
+	$(PY) tasks.py partitions $(ARGS)
 
 lint: ## ruff check + format check
 	$(PY) tasks.py lint

@@ -11,11 +11,12 @@ traceable end to end across a message broker, every rejection is kept and
 replayable, and the service-level objective is defined, measured and alerted on
 as code.
 
-> **Status: Phase 1 complete.** The collector fetches, archives and publishes
-> a real agency feed; the replay harness paces load from the archived corpus.
-> The processor is Phase 2, so nothing consumes the topic yet and no rows are
-> written. See [Roadmap](#roadmap) for exactly what does and does not run
-> today.
+> **Status: Phase 3 complete.** The pipeline runs end to end locally — feed to
+> broker to Postgres — with one trace spanning the broker, a dashboard whose
+> every panel is verified against a live Prometheus, and the SLO defined and
+> alerted on as rules. Nothing is deployed to GCP yet; Terraform and Cloud
+> Monitoring are Phase 4. See [Roadmap](#roadmap) for exactly what does and
+> does not run today.
 
 ---
 
@@ -104,6 +105,20 @@ needs no API key, so this works on a fresh clone:
 ```bash
 python tasks.py capture -- --count 5 --interval 15   # build a replay corpus
 python tasks.py replay  -- --rate 500 --duration 10s # replay it into Pub/Sub
+python tasks.py bridge  -- --duration 30s            # deliver it to the processor
+```
+
+`bridge` is a local stand-in for the push subscription. In production Pub/Sub
+POSTs each message to the processor's Cloud Run URL; locally the broker is an
+emulator in a container and the processor is a process on the host, which is the
+one thing the emulator cannot reach. The bridge pulls from the same
+subscription and performs the same POST, carrying the broker's own delivery
+count, so the processor code on the path is the production code.
+
+To put a value behind every panel and alert rule in one command:
+
+```bash
+python tasks.py smoke    # one of every signal, through the real components
 ```
 
 A scheduler tick can also be triggered by hand, which is how the collector runs
@@ -148,8 +163,11 @@ libs/transitpulse_core/
 tools/
   capture.py    one-shot fetch-and-archive, to build a corpus
   replay/       load harness: replays the corpus at any rate
+  pushbridge.py local stand-in for the push subscription
+  smoke.py      provokes one of every metric, for dashboard verification
 infra/terraform/ Pub/Sub, Cloud SQL, BigQuery, Cloud Run, IAM, SLOs
-observability/  collector config, Prometheus config, Grafana dashboards (in git)
+observability/  collector config, Prometheus config and rules,
+                Grafana dashboards and provisioning (all in git)
 migrations/     hand-written Alembic migrations
 docs/adr/       why things are the way they are
 ```
@@ -217,19 +235,93 @@ Metrics are named so each answers an operational question:
 | `transitpulse.ingest.lag` | Is it keeping up? *(the SLI)* |
 | `transitpulse.events.quarantined` | Is it losing data, and why? |
 | `transitpulse.events.deduped` | How much upstream traffic is repeats? |
+| `transitpulse.events.dead_lettered` | Has anything been lost? |
 | `transitpulse.sink.write.duration` | Which sink is slow? |
 | `transitpulse.processing.duration` | Is the latency ours or upstream's? |
-| `transitpulse.dlq.depth` | Is anything stuck? |
+| `transitpulse.partitions.headroom` | How many days of writes are left? |
+| `transitpulse.job.last_success_timestamp` | Is the schedule still firing? |
 
-**SLO: p95 end-to-end lag < 2s**, measured as `processed_time − event_time`
-over a rolling 1h window. The lag histogram's buckets are chosen around that
-boundary rather than left at SDK defaults, and the Grafana dashboard
-(`observability/grafana/dashboards/`) is committed as JSON so it can be read
-without running anything.
+Those names are not the names queries are written against. The Collector's
+Prometheus exporter rewrites every one: dots become underscores, counters gain
+`_total`, and the unit becomes a suffix — so `transitpulse.ingest.lag` with
+`unit="s"` is queried as `transitpulse_ingest_lag_seconds_bucket`. Changing a
+unit silently renames a series and empties a panel, which is why the mapping is
+derived from the registry and asserted rather than remembered.
+
+### The SLO
+
+**99% of events ingested within 2s**, where lag is `processed_time −
+event_time`, over a rolling 30 days.
+
+The 2s is derived: Cloud Scheduler ticks the collector every 15s, so a 2s
+ingest budget means ingestion is never the reason a position is stale — the
+feed's own cadence is, by an order of magnitude. The lag histogram's buckets
+are placed around that boundary rather than left at SDK defaults. **The 99% is
+a chosen target, not a measurement** — there is no production traffic to derive
+an achievable percentile from, and saying otherwise would be the kind of
+unearned number this project exists not to publish.
+
+It is defined once, as recording rules in `observability/prometheus/rules/`,
+and both the dashboard and the alerts read those recorded series. That is
+partly cost — the dashboard was recomputing three histogram quantiles on every
+ten-second refresh, per open tab — and mostly so the tile claiming compliance
+and the rule that pages about it cannot drift apart.
+
+### Alerting
+
+Nine rules, covering what this pipeline has actually hit or deliberately
+designed for. Every threshold in the files is either derived from something or
+labelled as a guess.
+
+| Alert | Fires on | Severity |
+|---|---|---|
+| `IngestLagBurnFast` | 14.4x budget burn over 1h **and** 5m | page |
+| `IngestLagBurnSlow` | 6x burn over 6h **and** 30m | page |
+| `IngestLagP95High` | p95 above the 2s objective for 10m | ticket |
+| `EventsDeadLettered` | anything dead-lettered at all | page |
+| `QuarantineRateSpike` | >5% of events rejected *(a guess)* | ticket |
+| `FeedCircuitOpen` | the collector has stopped calling upstream | page |
+| `FeedFailing` | upstream failing but not yet circuit-breaking | ticket |
+| `PartitionHeadroomLow` | under 3 days of partitions left | page |
+| `PartitionJobStale` | partition job last succeeded over 26h ago | ticket |
+
+The rules are mounted into Prometheus, which runs with `--web.enable-lifecycle`,
+so editing one takes effect on `curl -XPOST localhost:9090/-/reload`. The
+integration tests compare the rules Prometheus is actually holding against the
+files on disk, which is how a rules directory that failed to mount gets caught
+rather than being syntactically perfect and completely absent.
+
+Burn-rate alerting pairs a long window with a short one that must agree,
+because the long window alone keeps paging after recovery and the short one
+alone pages for every blip. Each alert carries a `runbook` annotation saying
+what to look at first; the two capacity rules exist because partitions really
+did run out mid-development and every insert was refused with no warning signal
+at all. [ADR-007](docs/adr/007-slo-and-alerting-as-code.md) has the reasoning,
+including what the local rules cannot express and why Phase 4 restates the same
+objective in Cloud Monitoring.
+
+### Why the dashboard is tested
+
+It was written before a single metric had ever been emitted, so its PromQL was
+composed against assumed series names — and the SLO tile, the one number the
+project is judged on, selected `le="2"` for a bucket Prometheus stores as
+`le="2.0"` and had been empty since the day it was committed. A "No data" panel
+is worse than a missing one, because the dashboard still looks finished.
+
+So two tests hold it in place. A unit test derives the series names the registry
+can actually produce and fails if a panel queries anything else — it needs no
+Docker, so it runs on every push. An integration test reads the expressions out
+of the committed JSON, drives real load, and fails if any one of them selects
+nothing. Neither restates a query: a test that duplicated the PromQL would pass
+while the dashboard was broken, which is the exact failure being guarded
+against.
 
 Deduplicated events are counted separately from quarantined ones: an agency
 re-sending a ping it already sent is normal traffic, not loss, and conflating
-the two makes the delivery-rate metric meaningless.
+the two makes the delivery-rate metric meaningless. For the same reason every
+counter whose label values are known at startup is declared at zero — an
+unincremented counter has no series, and "no series" looks exactly like zero on
+a dashboard while meaning that the process never started.
 
 ---
 
@@ -260,8 +352,8 @@ this code.
 - [x] **Phase 0** — tooling, data contract, telemetry library, sinks, schema,
       local stack, Docker image, CI
 - [x] **Phase 1** — collector handler, snapshot archiving, replay harness
-- [ ] **Phase 2** — processor handler, enrichment, static GTFS loader
-- [ ] **Phase 3** — dashboards and SLO alerting wired end to end
+- [x] **Phase 2** — processor handler, enrichment, static GTFS loader
+- [x] **Phase 3** — dashboards and SLO alerting wired end to end
 - [ ] **Phase 4** — Terraform, GCP deploy, Workload Identity Federation
 - [ ] **Phase 5** — canary deploys, nightly performance regression gate
 - [ ] **Phase 6** — chaos experiments, `BENCHMARKS.md`

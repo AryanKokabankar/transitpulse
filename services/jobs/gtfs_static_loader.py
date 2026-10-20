@@ -45,7 +45,7 @@ from psycopg import sql
 
 from transitpulse_core.config import Settings, get_settings
 from transitpulse_core.schedule import parse_gtfs_time
-from transitpulse_core.telemetry import get_tracer, setup_telemetry
+from transitpulse_core.telemetry import get_tracer, record_job_success, setup_telemetry
 
 log = structlog.get_logger(__name__)
 
@@ -330,6 +330,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     elapsed = time.perf_counter() - started
+    # After the error paths above, so the stamp means "a timetable was loaded"
+    # rather than "the job was invoked". A freshness alert on a stamp written
+    # unconditionally would go quiet for exactly the failure it exists to find.
+    record_job_success("gtfs_static_loader")
     log.info(
         "gtfs.load_completed",
         seconds=round(elapsed, 2),

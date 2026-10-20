@@ -144,6 +144,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     _sink = PostgresSink(settings)
     _bigquery = BigQuerySink(settings) if settings.bq_enabled else None
     _enricher = Enricher(_sink, settings)
+    # Declared at zero for every reason this processor can give up for, so the
+    # dead-letter panel and its alert read a real zero instead of "No data"
+    # until the first failure. See the note in PostgresSink.__init__.
+    dead_lettered = get_metrics().events_dead_lettered
+    for reason in QuarantineReason:
+        dead_lettered.add(0, {"reason": str(reason)})
     log.info(
         "processor.ready",
         bigquery_enabled=settings.bq_enabled,
@@ -394,6 +400,15 @@ async def _quarantine(
         await run_in_threadpool(get_sink().write_quarantine, [record])
     except Exception as exc:
         log.error("processor.quarantine_write_failed", reason=str(reason), error=str(exc))
+        attempt = envelope.delivery_attempt if envelope else 1
+        if attempt >= get_settings().max_delivery_attempts:
+            # The nack below is the last one the dead-letter policy allows, so
+            # the broker will move this message to the DLQ. This is the only
+            # point in the pipeline where that becomes knowable from inside a
+            # process: the broker performs the move and reports it to nobody,
+            # which is why the dashboard's old "DLQ depth" gauge could never
+            # have had a value (ADR-007).
+            get_metrics().events_dead_lettered.add(1, {"reason": str(reason)})
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"could not record quarantine for a {reason} rejection: {exc}",

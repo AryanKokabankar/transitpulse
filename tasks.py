@@ -12,6 +12,7 @@ works before the virtualenv exists.
     python tasks.py check         # lint + typecheck + unit tests
     python tasks.py capture       # archive one feed snapshot for the corpus
     python tasks.py replay -- --rate 500 --duration 10s
+    python tasks.py bridge -- --duration 30s   # deliver them to the processor
     python tasks.py help
 """
 
@@ -187,6 +188,21 @@ def task_replay(args: argparse.Namespace) -> None:
     run([str(venv_python()), "-m", "tools.replay", *args.rest], check=False)
 
 
+def task_bridge(args: argparse.Namespace) -> None:
+    """Deliver published messages to the processor: `bridge -- --duration 30s`."""
+    run([str(venv_python()), "-m", "tools.pushbridge", *args.rest], check=False)
+
+
+def task_smoke(args: argparse.Namespace) -> None:
+    """Provoke every metric the dashboard and alert rules read, once."""
+    run([str(venv_python()), "-m", "tools.smoke", *args.rest])
+
+
+def task_partitions(args: argparse.Namespace) -> None:
+    """Create partitions ahead of now, prune old ones, report the headroom."""
+    run([str(venv_python()), "-m", "services.jobs.partition_maintenance", *args.rest])
+
+
 def task_lint(_: argparse.Namespace) -> None:
     py = str(venv_python())
     run([py, "-m", "ruff", "check", "."])
@@ -243,6 +259,9 @@ TASKS = {
     "topology": task_topology,
     "capture": task_capture,
     "replay": task_replay,
+    "bridge": task_bridge,
+    "smoke": task_smoke,
+    "partitions": task_partitions,
     "lint": task_lint,
     "fmt": task_fmt,
     "typecheck": task_typecheck,

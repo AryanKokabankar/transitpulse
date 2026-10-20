@@ -15,6 +15,7 @@ import pytest
 from services.jobs.partition_maintenance import (
     Outcome,
     build_plan,
+    headroom_days,
     partition_day,
 )
 
@@ -115,3 +116,54 @@ class TestOutcome:
 
     def test_defaults_to_a_real_run(self) -> None:
         assert Outcome().dry_run is False
+
+
+class TestHeadroom:
+    """The gauge that would have prevented the partition outage.
+
+    Partitions ran out and every insert began failing with ``no partition of
+    relation "vehicle_events" found for row``, with no warning signal at all,
+    so these cases are the ones the alert threshold is read against.
+    """
+
+    def test_counts_days_ahead_of_today(self) -> None:
+        days = [TODAY + timedelta(days=i) for i in range(5)]
+        assert headroom_days(days, TODAY) == 4
+
+    def test_zero_means_today_is_the_last_day_that_can_accept_a_write(self) -> None:
+        assert headroom_days([TODAY - timedelta(days=1), TODAY], TODAY) == 0
+
+    def test_negative_means_writes_are_already_being_refused(self) -> None:
+        """Today itself has no partition, so this is an outage, not a warning."""
+        assert headroom_days([TODAY - timedelta(days=2), TODAY - timedelta(days=1)], TODAY) == -1
+
+    def test_no_partitions_at_all_is_also_an_outage(self) -> None:
+        assert headroom_days([], TODAY) == -1
+
+    def test_stops_at_the_first_gap(self) -> None:
+        """The whole reason this is contiguous rather than max() minus today.
+
+        A stray partition dated years ahead -- left by a test, or created by
+        hand during an incident -- makes the furthest-day arithmetic report
+        years of runway across a gap that refuses every insert the moment the
+        real window ends. Measured against the development database the two
+        readings were 14 days and 1,209.
+        """
+        days = [
+            TODAY,
+            TODAY + timedelta(days=1),
+            # gap at +2
+            TODAY + timedelta(days=3),
+            TODAY + timedelta(days=400),
+        ]
+        assert headroom_days(days, TODAY) == 1
+
+    def test_ignores_days_behind_today(self) -> None:
+        """Retention keeps old partitions around; they are not write capacity."""
+        days = [TODAY - timedelta(days=i) for i in range(7)] + [TODAY + timedelta(days=1)]
+        assert headroom_days(days, TODAY) == 1
+
+    def test_tolerates_duplicates_and_disorder(self) -> None:
+        """Fed straight from a dict's values, whose order is nobody's contract."""
+        days = [TODAY + timedelta(days=2), TODAY, TODAY + timedelta(days=1), TODAY]
+        assert headroom_days(days, TODAY) == 2
