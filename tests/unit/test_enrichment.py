@@ -172,10 +172,19 @@ class TestRouteNaming:
 
 class TestScheduleDelay:
     def test_the_delay_joins_trip_and_stop_sequence(self, make_ping: MakePing) -> None:
-        # Scheduled 08:15 local on the 15th; FIXED_NOW is 14:30 UTC = 10:30
-        # EDT, so this vehicle is badly late.
+        # Both the instant and the service date are pinned here rather than
+        # taken from the shared fixture: the expected delay depends on the
+        # agency's UTC offset, so a fixture that tracks "today" would make this
+        # assertion wrong by an hour the moment daylight saving ends.
+        event_time = datetime(2026, 10, 15, 14, 30, tzinfo=UTC)  # 10:30 EDT
         sink = StubSink(stop_times={("ABC123", 4): timedelta(hours=8, minutes=15)})
-        ping = make_ping(trip_id="ABC123", current_stop_sequence=4, start_date="20261015")
+        ping = make_ping(
+            trip_id="ABC123",
+            current_stop_sequence=4,
+            start_date="20261015",
+            event_time=event_time,
+            ingest_time=event_time,
+        )
 
         event = enricher(sink).enrich(ping)
 
@@ -184,8 +193,15 @@ class TestScheduleDelay:
         assert event.is_on_time is False
 
     def test_a_punctual_vehicle_is_on_time(self, make_ping: MakePing) -> None:
+        event_time = datetime(2026, 10, 15, 14, 30, tzinfo=UTC)  # 10:30 EDT
         sink = StubSink(stop_times={("ABC123", 4): timedelta(hours=10, minutes=30)})
-        ping = make_ping(trip_id="ABC123", current_stop_sequence=4, start_date="20261015")
+        ping = make_ping(
+            trip_id="ABC123",
+            current_stop_sequence=4,
+            start_date="20261015",
+            event_time=event_time,
+            ingest_time=event_time,
+        )
 
         event = enricher(sink).enrich(ping)
 

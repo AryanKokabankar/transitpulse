@@ -98,6 +98,18 @@ class Settings(BaseSettings):
     snapshot_bucket: str = "transitpulse-snapshots"
     snapshot_local_dir: str = "./replay-corpus"
 
+    # --- partition maintenance ----------------------------------------
+    # How far ahead to keep daily partitions of vehicle_events. An INSERT with
+    # no matching partition fails outright rather than degrading, so this
+    # window is the margin between a missed maintenance run and refused
+    # traffic -- two weeks means a fortnight of broken cron goes unnoticed
+    # without data loss.
+    partition_ahead_days: int = 14
+    # Partitions whose day is older than this are detached and dropped.
+    # Turning deletion into a DROP instead of a bulk DELETE is the main reason
+    # the table is partitioned at all.
+    partition_retention_days: int = 7
+
     # --- observability ------------------------------------------------
     otel_enabled: bool = True
     otel_console_export: bool = False

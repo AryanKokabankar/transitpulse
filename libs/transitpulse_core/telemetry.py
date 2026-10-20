@@ -15,7 +15,6 @@ fetch -> decode -> publish -> consume -> enrich -> Postgres -> BigQuery.
 from __future__ import annotations
 
 import logging
-import sys
 from collections.abc import MutableMapping
 from dataclasses import dataclass
 from functools import lru_cache
@@ -68,6 +67,8 @@ class Metrics:
     feed_fetch_failures: Counter
     dlq_depth: UpDownCounter
     inflight_batches: UpDownCounter
+    partitions_ensured: Counter
+    partitions_dropped: Counter
 
 
 @lru_cache(maxsize=1)
@@ -128,6 +129,14 @@ def get_metrics() -> Metrics:
             "transitpulse.sink.inflight_batches",
             description="Sink batches submitted but not yet acknowledged",
         ),
+        partitions_ensured=meter.create_counter(
+            "transitpulse.partitions.ensured",
+            description="Daily partitions created by the maintenance job",
+        ),
+        partitions_dropped=meter.create_counter(
+            "transitpulse.partitions.dropped",
+            description="Daily partitions dropped past the retention window",
+        ),
     )
 
 
@@ -185,7 +194,9 @@ def _inject_trace_into_log(
     return event_dict
 
 
-def _configure_logging(service_name: str, log_level: str, json_logs: bool) -> None:
+def _configure_logging(
+    service_name: str, log_level: str, *, json_logs: bool, is_local: bool
+) -> None:
     renderer: Any = (
         structlog.processors.JSONRenderer()
         if json_logs
@@ -202,8 +213,19 @@ def _configure_logging(service_name: str, log_level: str, json_logs: bool) -> No
             renderer,
         ],
         wrapper_class=structlog.make_filtering_bound_logger(logging.getLevelName(log_level)),
-        logger_factory=structlog.PrintLoggerFactory(file=sys.stdout),
-        cache_logger_on_first_use=True,
+        # No explicit file= here, deliberately. structlog's PrintLogger resolves
+        # sys.stdout at write time only while it holds the exact stdout object
+        # structlog imported; handing it a replaced stream pins that stream
+        # forever instead. Under pytest, sys.stdout is a per-test capture buffer
+        # that gets closed at teardown, so a pinned one makes every later log
+        # call raise "I/O operation on closed file" -- in a different test file
+        # from the one that caused it.
+        logger_factory=structlog.PrintLoggerFactory(),
+        # Caching binds one logger (and its stream) for the process lifetime,
+        # which is a worthwhile saving only where that stream is stable. It is
+        # in the deployed services; it is not locally, under pytest or in a
+        # notebook, so locally a logger is built per call.
+        cache_logger_on_first_use=not is_local,
     )
     structlog.contextvars.bind_contextvars(service=service_name)
 
@@ -223,6 +245,7 @@ def setup_telemetry(service_name: str, *, instrument_libraries: bool = True) -> 
         service_name,
         settings.log_level,
         json_logs=not settings.is_local,
+        is_local=settings.is_local,
     )
 
     if not settings.otel_enabled:

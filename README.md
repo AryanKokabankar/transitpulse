@@ -135,7 +135,8 @@ services/
   collector/    main.py (POST /collect) + feed.py (fetch, retry, decode)
   processor/    validate, dedupe, enrich, dual-write
   api/          serving reads over vehicle_live and the history
-  jobs/         dlq_replayer, nightly_aggregate, gtfs_static_loader
+  jobs/         gtfs_static_loader, partition_maintenance,
+                dlq_replayer, nightly_aggregate
 libs/transitpulse_core/
   models.py     the data contract (three timestamps, idempotency key)
   telemetry.py  OTel bootstrap + cross-broker trace propagation

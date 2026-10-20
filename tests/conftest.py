@@ -39,9 +39,16 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 os.environ["TP_OTEL_ENABLED"] = "false"
 os.environ.setdefault("TP_ENV", "local")
 
-# A fixed instant keeps idempotency-key assertions stable; a drifting "now"
-# would make the hash different on every run.
-FIXED_NOW = datetime(2026, 10, 15, 14, 30, 0, tzinfo=UTC)
+# Fixed for the duration of a run, so idempotency-key assertions are stable,
+# but anchored to today rather than hardcoded to a calendar date.
+#
+# vehicle_events is partitioned by day and an insert outside every partition
+# fails outright, so a hardcoded instant silently expires: it works while the
+# database was migrated that week and then starts failing with "no partition of
+# relation found for row" on every fresh clone and after any partition pruning.
+# Anchoring to the current date keeps the fixture inside the maintained window
+# permanently.
+FIXED_NOW = datetime.now(UTC).replace(hour=14, minute=30, second=0, microsecond=0)
 
 
 @pytest.fixture(autouse=True)
@@ -73,7 +80,7 @@ def make_ping() -> MakePing:
             "trip_id": "ABC123",
             "route_id": "Q",
             "direction_id": 0,
-            "start_date": "20261015",
+            "start_date": FIXED_NOW.strftime("%Y%m%d"),
             "schedule_relationship": ScheduleRelationship.SCHEDULED,
             "latitude": 40.7128,
             "longitude": -74.0060,
