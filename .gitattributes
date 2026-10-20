@@ -1,0 +1,28 @@
+# Normalise line endings in the repository, and check out LF everywhere.
+#
+# This project is developed on Windows and runs in Linux containers, which is
+# exactly the combination that breaks shell scripts: with core.autocrlf=true a
+# fresh clone would give docker/entrypoint.sh CRLF endings, the Dockerfile would
+# COPY it into the image unchanged, and the container would die at startup with
+# "exec /usr/local/bin/entrypoint.sh: no such file or directory" -- an error
+# that says nothing about line endings. Pinning eol=lf prevents it.
+* text=auto eol=lf
+
+# Files where CRLF is not merely untidy but actively breaks something.
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+.dockerignore   text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+.env.example    text eol=lf
+Makefile        text eol=lf
+*.mako          text eol=lf
+
+# Captured GTFS-Realtime payloads and archives: never touch these.
+*.pb            binary
+*.zip           binary
+*.png           binary
+*.jpg           binary
+
+# Keep generated artefacts out of diffs and language statistics.
+observability/grafana/dashboards/*.json linguist-generated=false
