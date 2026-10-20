@@ -207,11 +207,32 @@ groups:
   - name: transitpulse-capacity
     rules:
       - alert: TransitPulsePartitionHeadroomLow
-        # min, not max: if any reporter says the runway is short, believe it.
-        # Each job run exports under a fresh instance label, so several
-        # measurements can be live at once inside the Collector's expiry
-        # window, and the pessimistic one is the safe one to act on.
-        expr: min by (table) (transitpulse_partitions_headroom_days) < 3
+        # Scoped to the job that owns the window, and to a single series.
+        #
+        # This rule previously aggregated with min() across every reporter, on
+        # the reasoning that a short runway anywhere should be believed. That
+        # was wrong, and it paged while the real headroom was 14 days: the
+        # Collector re-publishes each finished run's last value until it
+        # expires, so a reading of 1 taken before the window was extended sat
+        # beside the current 14 and min() picked the stale one. Both carry the
+        # live scrape timestamp, so nothing in PromQL can distinguish them.
+        #
+        # The job now pins service.instance.id, so repeat runs overwrite one
+        # series; the service_name matcher keeps the smoke driver and tests,
+        # which exercise the same code path, from reporting into the alert.
+        # With exactly one authoritative series, min() is simply its value.
+        # Both matchers, and the instance one is the load-bearing half: the
+        # stale readings came from this same service under auto-generated
+        # instance ids, so service_name alone would still have let them fire
+        # until metric_expiration swept them an hour later. Matching the
+        # pinned id selects the one series the job overwrites, and is wrong
+        # only if someone unpins it -- which a unit test now prevents.
+        expr: min by (table) (
+            transitpulse_partitions_headroom_days{
+              service_name="transitpulse-partition-maintenance",
+              service_instance_id="transitpulse-partition-maintenance"
+            }
+          ) < 3
         for: 10m
         labels:
           severity: page

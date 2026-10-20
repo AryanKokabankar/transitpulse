@@ -1,0 +1,129 @@
+# promtool unit tests for the alert rules.
+#
+#   docker exec tp-prometheus promtool test rules \n#       /etc/prometheus/rule_tests/alerts_test.yml
+#   python tasks.py rules
+#
+# These exist because the only previous evidence that an alert worked was
+# having watched it fire, which says nothing about whether it fires for the
+# right reason or stays quiet when it should. The partition-headroom cases are
+# a regression test for a page that fired while the real headroom was 14 days:
+# a finished run's reading of 1 was still being re-published under its own
+# instance id, and `min` across reporters preferred it. Asserting that directly
+# is cheaper, and far more honest, than dropping partitions to watch an alert
+# go off.
+#
+# Firing cases are asserted with promql_expr_test rather than exp_alerts on
+# purpose. exp_alerts compares every annotation verbatim, which would pin these
+# tests to paragraphs of runbook prose; the expression is what was wrong, so the
+# expression is what is tested. The must-stay-silent cases use alert_rule_test,
+# where an empty expectation needs no annotations and also exercises `for`.
+
+# Deliberately a directory away from the rules themselves: Prometheus loads
+# rule_files as /etc/prometheus/rules/*.yml, and a promtool test file sitting
+# in that glob is not a valid rule group -- it made `promtool check config`
+# fail outright until it was moved here.
+rule_files:
+  - ../rules/alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  # --------------------------------------------------------------------
+  # Partition headroom: the regression this file was written for
+  # --------------------------------------------------------------------
+  - interval: 1m
+    name: a healthy window raises nothing
+    input_series:
+      - series: 'transitpulse_partitions_headroom_days{table="vehicle_events", service_name="transitpulse-partition-maintenance", service_instance_id="transitpulse-partition-maintenance"}'
+        values: "14+0x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: TransitPulsePartitionHeadroomLow
+        exp_alerts: []
+
+  - interval: 1m
+    name: a short window is detected, and only after it persists
+    input_series:
+      - series: 'transitpulse_partitions_headroom_days{table="vehicle_events", service_name="transitpulse-partition-maintenance", service_instance_id="transitpulse-partition-maintenance"}'
+        values: "2+0x20"
+    promql_expr_test:
+      # The rule's own expression: it selects, so the rule fires.
+      - expr: 'min by (table) (transitpulse_partitions_headroom_days{service_name="transitpulse-partition-maintenance", service_instance_id="transitpulse-partition-maintenance"}) < 3'
+        eval_time: 15m
+        exp_samples:
+          - labels: '{table="vehicle_events"}'
+            value: 2
+    alert_rule_test:
+      # Still silent inside the `for` window: one scrape taken while the job
+      # is mid-run is not an incident.
+      - eval_time: 5m
+        alertname: TransitPulsePartitionHeadroomLow
+        exp_alerts: []
+
+  - interval: 1m
+    name: a stale reading from a finished run cannot page
+    # Two series for one table: the live one the job overwrites, and one left
+    # behind by an earlier run under a generated instance id, still being
+    # re-published by the Collector and still carrying the current scrape
+    # timestamp. Before the fix, min() across both picked the 1 and paged.
+    input_series:
+      - series: 'transitpulse_partitions_headroom_days{table="vehicle_events", service_name="transitpulse-partition-maintenance", service_instance_id="transitpulse-partition-maintenance"}'
+        values: "14+0x20"
+      - series: 'transitpulse_partitions_headroom_days{table="vehicle_events", service_name="transitpulse-partition-maintenance", service_instance_id="8f0c7ca3-97df-42cc-b4eb-d614911e8ccd"}'
+        values: "1+0x20"
+    promql_expr_test:
+      # The scoped expression reads 14 and so selects nothing below 3.
+      - expr: 'min by (table) (transitpulse_partitions_headroom_days{service_name="transitpulse-partition-maintenance", service_instance_id="transitpulse-partition-maintenance"}) < 3'
+        eval_time: 15m
+        exp_samples: []
+      # The unscoped version that shipped first would have picked the stale 1.
+      # Kept as the explicit record of the defect.
+      - expr: "min by (table) (transitpulse_partitions_headroom_days) < 3"
+        eval_time: 15m
+        exp_samples:
+          - labels: '{table="vehicle_events"}'
+            value: 1
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: TransitPulsePartitionHeadroomLow
+        exp_alerts: []
+
+  - interval: 1m
+    name: the smoke driver exercising the same code path cannot page
+    input_series:
+      - series: 'transitpulse_partitions_headroom_days{table="vehicle_events", service_name="transitpulse-smoke", service_instance_id="transitpulse-smoke"}'
+        values: "0+0x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: TransitPulsePartitionHeadroomLow
+        exp_alerts: []
+
+  # --------------------------------------------------------------------
+  # Durability
+  # --------------------------------------------------------------------
+  - interval: 1m
+    name: a dead-lettered event is detected
+    input_series:
+      # Flat at zero, then one message is dead-lettered at minute 11 and the
+      # counter stays flat: increase() must still see the step while the jump
+      # is inside its window.
+      - series: 'transitpulse_events_dead_lettered_total{agency="mbta"}'
+        values: "0+0x10 1+0x20"
+    promql_expr_test:
+      - expr: "sum(increase(transitpulse_events_dead_lettered_total[10m])) > 0"
+        eval_time: 15m
+        exp_samples:
+          - labels: "{}"
+            # Measured, not derived: increase() over this window reports
+            # exactly 1 here, with no extrapolation applied.
+            value: 1
+
+  - interval: 1m
+    name: a quiet dead-letter queue raises nothing
+    input_series:
+      - series: 'transitpulse_events_dead_lettered_total{agency="mbta"}'
+        values: "0+0x30"
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: TransitPulseEventsDeadLettered
+        exp_alerts: []

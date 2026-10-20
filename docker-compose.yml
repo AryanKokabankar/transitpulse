@@ -102,6 +102,10 @@ services:
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./observability/prometheus/rules:/etc/prometheus/rules:ro
+      # Mounted read-only alongside, not inside, the rules directory: the
+      # rule_files glob would otherwise try to load the test file as a
+      # rule group and reject the whole config.
+      - ./observability/prometheus/rule_tests:/etc/prometheus/rule_tests:ro
     ports:
       - "9090:9090"
     depends_on:

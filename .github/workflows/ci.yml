@@ -148,17 +148,22 @@ jobs:
         run: |
           docker network create transitpulse-ci
           docker run -d --name otel-collector --network transitpulse-ci             -p 4317:4317 -p 8889:8889             -v "$PWD/observability/otel-collector.yaml:/etc/otel/config.yaml:ro"             otel/opentelemetry-collector-contrib:0.111.0             --config=/etc/otel/config.yaml
-          docker run -d --name prometheus --network transitpulse-ci             -p 9090:9090             -v "$PWD/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro"             -v "$PWD/observability/prometheus/rules:/etc/prometheus/rules:ro"             prom/prometheus:v2.55.0             --config.file=/etc/prometheus/prometheus.yml             --storage.tsdb.retention.time=6h
+          docker run -d --name prometheus --network transitpulse-ci             -p 9090:9090             -v "$PWD/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro"             -v "$PWD/observability/prometheus/rules:/etc/prometheus/rules:ro"             -v "$PWD/observability/prometheus/rule_tests:/etc/prometheus/rule_tests:ro"             prom/prometheus:v2.55.0             --config.file=/etc/prometheus/prometheus.yml             --storage.tsdb.retention.time=6h
           for i in $(seq 1 30); do
             if curl -sf http://localhost:9090/-/ready >/dev/null; then echo ready; break; fi
             sleep 2
           done
 
-      - name: Check the Prometheus rules
-        # promtool validates the files; the integration tests then validate
-        # that the rules Prometheus is actually holding are these ones.
+      - name: Check the Prometheus rules and run their unit tests
+        # Two different failures, both invisible to every Python test.
+        # `check config` catches a rule file that will not load at all -- a
+        # promtool test file left inside the rule_files glob did exactly that.
+        # `test rules` catches a rule that loads and then evaluates to the
+        # wrong thing, which is how a paging alert once fired for ten minutes
+        # while the system it watched was perfectly healthy.
         run: |
-          docker exec prometheus promtool check rules /etc/prometheus/rules/*.yml
+          docker exec prometheus promtool check config /etc/prometheus/prometheus.yml
+          docker exec prometheus promtool test rules /etc/prometheus/rule_tests/alerts_test.yml
 
       - name: Migrate
         run: alembic upgrade head

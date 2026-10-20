@@ -327,12 +327,36 @@ def _configure_logging(
 # ----------------------------------------------------------------------
 # Bootstrap
 # ----------------------------------------------------------------------
-def setup_telemetry(service_name: str, *, instrument_libraries: bool = True) -> None:
+def setup_telemetry(
+    service_name: str,
+    *,
+    instrument_libraries: bool = True,
+    instance_id: str | None = None,
+) -> None:
     """Configure traces, metrics and logs. Call once, at process start.
 
     Exporters are OTLP/gRPC, which both the local Collector and Cloud Trace
     accept -- the same binary runs in both places with only an endpoint
     environment variable changing.
+
+    ``instance_id`` pins ``service.instance.id`` instead of letting the SDK
+    generate a fresh one per process. Pass it from **singleton batch jobs that
+    report a gauge describing shared state**, and nowhere else.
+
+    The reason is specific. The Collector's Prometheus exporter promotes
+    resource attributes to labels, so an auto-generated instance id makes every
+    invocation its own time series. For a counter that is harmless. For a gauge
+    of a global fact -- "how many days of partitions exist" -- it is not: the
+    exporter keeps re-publishing each dead run's last value until it expires,
+    so Prometheus sees one truth alongside several stale readings, all carrying
+    the current scrape timestamp. No timestamp arithmetic can tell them apart,
+    and any aggregation across them is wrong in one direction or the other
+    (``min`` pages on an old low reading, ``max`` hides a real one). A stable id
+    means repeat runs overwrite one series, which is the only reading that can
+    be correct.
+
+    Long-lived services must NOT pass this: there a per-instance id is what
+    makes "which replica is slow" answerable.
     """
     settings = get_settings()
     _configure_logging(
@@ -346,14 +370,15 @@ def setup_telemetry(service_name: str, *, instrument_libraries: bool = True) -> 
         structlog.get_logger().info("telemetry.disabled", service=service_name)
         return
 
-    resource = Resource.create(
-        {
-            "service.name": service_name,
-            "service.version": "0.1.0",
-            "service.namespace": "transitpulse",
-            "deployment.environment": settings.env,
-        }
-    )
+    attributes: dict[str, str] = {
+        "service.name": service_name,
+        "service.version": "0.1.0",
+        "service.namespace": "transitpulse",
+        "deployment.environment": settings.env,
+    }
+    if instance_id is not None:
+        attributes["service.instance.id"] = instance_id
+    resource = Resource.create(attributes)
 
     tracer_provider = TracerProvider(resource=resource)
     tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))

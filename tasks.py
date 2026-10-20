@@ -203,6 +203,44 @@ def task_partitions(args: argparse.Namespace) -> None:
     run([str(venv_python()), "-m", "services.jobs.partition_maintenance", *args.rest])
 
 
+def task_rules(_: argparse.Namespace) -> None:
+    """Validate the Prometheus rules and run their promtool unit tests.
+
+    Runs inside the Prometheus container because promtool ships with it and is
+    not installed on the host. Both halves matter: `check` catches a rule file
+    that will not load, and `test` catches one that loads and then evaluates to
+    the wrong thing -- which is how a paging alert once fired while the system
+    it watched was healthy.
+    """
+    require_docker()
+    rules = "/etc/prometheus/rules"
+    run(
+        [
+            *COMPOSE,
+            "exec",
+            "-T",
+            "prometheus",
+            "promtool",
+            "check",
+            "config",
+            "/etc/prometheus/prometheus.yml",
+        ]
+    )
+    run(
+        [
+            *COMPOSE,
+            "exec",
+            "-T",
+            "prometheus",
+            "promtool",
+            "test",
+            "rules",
+            "/etc/prometheus/rule_tests/alerts_test.yml",
+        ]
+    )
+    print(f"rules in {rules} are valid and their unit tests pass")
+
+
 def task_lint(_: argparse.Namespace) -> None:
     py = str(venv_python())
     run([py, "-m", "ruff", "check", "."])
@@ -262,6 +300,7 @@ TASKS = {
     "bridge": task_bridge,
     "smoke": task_smoke,
     "partitions": task_partitions,
+    "rules": task_rules,
     "lint": task_lint,
     "fmt": task_fmt,
     "typecheck": task_typecheck,

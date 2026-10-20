@@ -222,3 +222,63 @@ def test_no_panel_uses_a_second_y_axis(path: Path) -> None:
                 assert not (
                     prop.get("id") == "custom.axisPlacement" and prop.get("value") == "right"
                 ), f"{path.name} panel {panel.get('id')} places a series on a right-hand axis"
+
+
+def _alert_rules() -> list[dict[str, object]]:
+    rules: list[dict[str, object]] = []
+    for path in sorted(RULES_DIR.glob("*.yml")):
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        for group in document.get("groups", []):
+            for rule in group.get("rules", []):
+                if "alert" in rule:
+                    rules.append(rule)
+    return rules
+
+
+# Gauges that describe shared state -- the database, not the reporter. A run of
+# a batch job exports one of these and exits; the Collector then re-publishes
+# that last value until metric_expiration, so without a stable identity the
+# readings of several finished runs sit in Prometheus at once, every one of them
+# stamped with the current scrape time. Aggregating across them is wrong in
+# whichever direction it is done, and no timestamp arithmetic can separate
+# them, so an alert on one of these must select a single reporter instead.
+_SHARED_STATE_GAUGES = {
+    "transitpulse_partitions_headroom_days": "transitpulse-partition-maintenance",
+}
+
+
+@pytest.mark.parametrize(("series", "owner"), sorted(_SHARED_STATE_GAUGES.items()))
+def test_an_alert_on_shared_state_selects_one_authoritative_reporter(
+    series: str, owner: str
+) -> None:
+    """Regression test for a page that fired while nothing was wrong.
+
+    ``TransitPulsePartitionHeadroomLow`` read
+    ``min by (table) (transitpulse_partitions_headroom_days)`` across every
+    reporter. The intent was caution -- believe the shortest runway anyone
+    reports -- but the effect was that a reading of 1, taken before the window
+    was extended, outvoted the current 14 for as long as the Collector kept
+    re-publishing it. Scoping the query to the job that owns the window is what
+    makes the aggregation meaningful.
+    """
+    offenders = [
+        rule["alert"]
+        for rule in _alert_rules()
+        if series in str(rule.get("expr", ""))
+        and f'service_name="{owner}"' not in str(rule.get("expr", ""))
+    ]
+    assert offenders == [], (
+        f"these alerts query {series} without restricting it to {owner!r}, "
+        f"so a stale reading from a finished run can trigger them: {offenders}"
+    )
+
+
+def test_every_alert_carries_a_severity_and_a_runbook() -> None:
+    """An alert nobody knows how to action is noise with extra steps."""
+    incomplete = [
+        rule["alert"]
+        for rule in _alert_rules()
+        if not rule.get("labels", {}).get("severity")
+        or not rule.get("annotations", {}).get("runbook")
+    ]
+    assert incomplete == [], f"alerts missing severity or runbook: {incomplete}"

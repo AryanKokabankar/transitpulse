@@ -327,7 +327,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    setup_telemetry(SERVICE_NAME, instrument_libraries=False)
+    # A pinned instance id, because the headroom gauge below describes the
+    # database rather than this process: successive runs must overwrite one
+    # series instead of each leaving a stale reading behind. See
+    # setup_telemetry's docstring for why aggregation cannot fix that after
+    # the fact.
+    setup_telemetry(SERVICE_NAME, instrument_libraries=False, instance_id=SERVICE_NAME)
     settings = get_settings()
 
     try:
