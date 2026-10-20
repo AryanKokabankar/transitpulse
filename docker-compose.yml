@@ -1,0 +1,126 @@
+# ---------------------------------------------------------------------------
+# Full local parity stack: broker, database, and the complete observability
+# chain. Everything the cloud deployment uses has a local stand-in, so the
+# pipeline can be developed, load-tested and debugged with no GCP account and
+# no spend. The only component with no local equivalent is BigQuery, which is
+# why TP_BQ_ENABLED defaults to false.
+#
+#   docker compose up -d        (or: python tasks.py up)
+#   Jaeger      http://localhost:16686
+#   Prometheus  http://localhost:9090
+#   Grafana     http://localhost:3000   (admin / admin)
+# ---------------------------------------------------------------------------
+
+name: transitpulse
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tp-postgres
+    environment:
+      POSTGRES_USER: transitpulse
+      POSTGRES_PASSWORD: transitpulse
+      POSTGRES_DB: transitpulse
+      # Local-only: speeds up the load harness considerably by not waiting on
+      # fsync. Never set this on anything whose data matters.
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    command:
+      - postgres
+      - -c
+      - fsync=off
+      - -c
+      - synchronous_commit=off
+      - -c
+      - max_connections=200
+      - -c
+      - shared_buffers=256MB
+      # pg_stat_statements is what makes the "which query is slow" question
+      # answerable during a load test.
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U transitpulse -d transitpulse"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  pubsub:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    container_name: tp-pubsub
+    command: >
+      gcloud beta emulators pubsub start
+      --host-port=0.0.0.0:8085
+      --project=transitpulse-local
+    ports:
+      - "8085:8085"
+    healthcheck:
+      # The emulator has no health endpoint; a refused TCP connect is the
+      # signal, so we probe the port directly.
+      test: ["CMD-SHELL", "curl -sf http://localhost:8085/ || exit 1"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.111.0
+    container_name: tp-otel-collector
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./observability/otel-collector.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC -- what the services export to
+      - "4318:4318"   # OTLP HTTP
+      - "8889:8889"   # Prometheus scrape endpoint for collected metrics
+    depends_on:
+      - jaeger
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    container_name: tp-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"  # UI
+    # Jaeger's own OTLP ports stay internal; the collector is the single
+    # ingress point so the services have exactly one endpoint to configure.
+    expose:
+      - "4317"
+
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    container_name: tp-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=6h
+      - --web.enable-lifecycle
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - otel-collector
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: tp-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_DEFAULT_THEME: light
+    volumes:
+      - ./observability/grafana:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  pgdata:
