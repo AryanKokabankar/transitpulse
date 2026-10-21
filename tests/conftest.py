@@ -39,16 +39,28 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 os.environ["TP_OTEL_ENABLED"] = "false"
 os.environ.setdefault("TP_ENV", "local")
 
-# Fixed for the duration of a run, so idempotency-key assertions are stable,
-# but anchored to today rather than hardcoded to a calendar date.
+# Fixed for the duration of a run, and always a few minutes in the past.
 #
-# vehicle_events is partitioned by day and an insert outside every partition
-# fails outright, so a hardcoded instant silently expires: it works while the
-# database was migrated that week and then starts failing with "no partition of
-# relation found for row" on every fresh clone and after any partition pruning.
-# Anchoring to the current date keeps the fixture inside the maintained window
-# permanently.
-FIXED_NOW = datetime.now(UTC).replace(hour=14, minute=30, second=0, microsecond=0)
+# Three constraints have to hold at once, and the first two attempts each
+# satisfied two of them:
+#
+# 1. Stable within a run, so idempotency keys derived from it do not change
+#    between two calls in the same test.
+# 2. Inside the maintained partition window. vehicle_events is partitioned by
+#    day and an insert outside every partition fails outright, so the original
+#    hardcoded 2026-10-15 worked only while the database had been migrated that
+#    week and then failed with "no partition of relation found for row".
+# 3. Earlier than the real clock. Code under test stamps processed_time from
+#    datetime.now(), and assertions compare it against the fixture's
+#    ingest_time, so a fixture in the future makes those comparisons fail.
+#    Pinning the time of day to 14:30 UTC broke this: the suite passed only
+#    when run after 14:30 UTC and failed before it -- an intermittent failure
+#    that depends on what time of day CI happens to run.
+#
+# Offsetting backwards from now satisfies all three. Crossing UTC midnight is
+# fine: the offset lands on the previous day, and the partition window always
+# includes yesterday for exactly this kind of late arrival.
+FIXED_NOW = (datetime.now(UTC) - timedelta(minutes=5)).replace(microsecond=0)
 
 
 @pytest.fixture(autouse=True)
