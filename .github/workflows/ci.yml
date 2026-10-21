@@ -212,7 +212,11 @@ jobs:
             || echo "entrypoint rejects unknown services as expected"
 
       - name: Trivy scan
-        uses: aquasecurity/trivy-action@0.28.0
+        # Tag carries a leading v -- written without one, this resolved to
+        # nothing and the job failed before running a single step. Verified
+        # against the repository's tag list, and the five inputs below against
+        # this version's action.yaml, rather than recalled.
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: transitpulse:${{ github.sha }}
           severity: HIGH,CRITICAL
