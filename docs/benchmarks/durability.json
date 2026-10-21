@@ -1,0 +1,233 @@
+{
+  "scenario": "durability",
+  "question": "How much of the write throughput is borrowed from having fsync switched off?",
+  "passed": true,
+  "started_at": "2026-10-21T18:21:23.044343+00:00",
+  "seconds": 481.969,
+  "checks": [
+    {
+      "name": "the development database has fsync off",
+      "passed": true,
+      "detail": "expected 'off', measured 'off'"
+    },
+    {
+      "name": "the comparison database has fsync on",
+      "passed": true,
+      "detail": "expected 'on', measured 'on'"
+    },
+    {
+      "name": "the two configurations genuinely differ",
+      "passed": true,
+      "detail": "development fsync=off, durable fsync=on"
+    },
+    {
+      "name": "zero loss against the development database, pass 1",
+      "passed": true,
+      "detail": "expected 3000, measured 3000"
+    },
+    {
+      "name": "zero loss against the durable database, pass 2",
+      "passed": true,
+      "detail": "expected 3000, measured 3000"
+    },
+    {
+      "name": "zero loss against the durable database, pass 3",
+      "passed": true,
+      "detail": "expected 3000, measured 3000"
+    },
+    {
+      "name": "zero loss against the development database, pass 4",
+      "passed": true,
+      "detail": "expected 3000, measured 3000"
+    }
+  ],
+  "measurements": {
+    "development_postgres": {
+      "fsync": "off",
+      "synchronous_commit": "off",
+      "shared_buffers": "256MB",
+      "max_connections": "200",
+      "server_version": "16.15"
+    },
+    "durable_postgres": {
+      "fsync": "on",
+      "synchronous_commit": "on",
+      "shared_buffers": "256MB",
+      "max_connections": "200",
+      "server_version": "16.15"
+    },
+    "passes": [
+      {
+        "pass": 1,
+        "configuration": "development",
+        "concurrency": 32,
+        "pg_pool_max": 10,
+        "pg_dsn_host": "localhost:5432",
+        "processor": "separate process",
+        "backlog": 3000,
+        "published": 3000,
+        "processed": 3000,
+        "rows_written": 3000,
+        "publish_seconds": 5.297,
+        "drain_seconds": 92.782,
+        "drain_per_second": 32.3,
+        "latency": {
+          "rows": 3000,
+          "processing_seconds": {
+            "p50": 51.446119,
+            "p95": 93.868059,
+            "p99": 97.448066
+          },
+          "end_to_end_seconds": {
+            "p50": 199.249066,
+            "p95": 267.83099,
+            "p99": 343.845862
+          },
+          "corpus_age_seconds": {
+            "p50": 147.0,
+            "p95": 197.0,
+            "p99": 283.05
+          },
+          "processing_max_seconds": 98.069739,
+          "end_to_end_max_seconds": 1895.825232
+        }
+      },
+      {
+        "pass": 2,
+        "configuration": "durable",
+        "concurrency": 32,
+        "pg_pool_max": 10,
+        "pg_dsn_host": "localhost:5433",
+        "processor": "separate process",
+        "backlog": 3000,
+        "published": 3000,
+        "processed": 3000,
+        "rows_written": 3000,
+        "publish_seconds": 3.406,
+        "drain_seconds": 87.641,
+        "drain_per_second": 34.2,
+        "latency": {
+          "rows": 3000,
+          "processing_seconds": {
+            "p50": 43.946206,
+            "p95": 87.235261,
+            "p99": 90.479673
+          },
+          "end_to_end_seconds": {
+            "p50": 192.196624,
+            "p95": 261.020298,
+            "p99": 336.717046
+          },
+          "corpus_age_seconds": {
+            "p50": 147.0,
+            "p95": 197.0,
+            "p99": 283.05
+          },
+          "processing_max_seconds": 91.06897,
+          "end_to_end_max_seconds": 1889.649238
+        }
+      },
+      {
+        "pass": 3,
+        "configuration": "durable",
+        "concurrency": 32,
+        "pg_pool_max": 10,
+        "pg_dsn_host": "localhost:5433",
+        "processor": "separate process",
+        "backlog": 3000,
+        "published": 3000,
+        "processed": 3000,
+        "rows_written": 3000,
+        "publish_seconds": 3.609,
+        "drain_seconds": 73.89,
+        "drain_per_second": 40.6,
+        "latency": {
+          "rows": 3000,
+          "processing_seconds": {
+            "p50": 40.495411,
+            "p95": 73.793037,
+            "p99": 76.888283
+          },
+          "end_to_end_seconds": {
+            "p50": 189.34465,
+            "p95": 250.598526,
+            "p99": 331.719088
+          },
+          "corpus_age_seconds": {
+            "p50": 147.0,
+            "p95": 197.0,
+            "p99": 283.05
+          },
+          "processing_max_seconds": 77.491691,
+          "end_to_end_max_seconds": 1880.795715
+        }
+      },
+      {
+        "pass": 4,
+        "configuration": "development",
+        "concurrency": 32,
+        "pg_pool_max": 10,
+        "pg_dsn_host": "localhost:5432",
+        "processor": "separate process",
+        "backlog": 3000,
+        "published": 3000,
+        "processed": 3000,
+        "rows_written": 3000,
+        "publish_seconds": 3.375,
+        "drain_seconds": 85.094,
+        "drain_per_second": 35.3,
+        "latency": {
+          "rows": 3000,
+          "processing_seconds": {
+            "p50": 39.483351,
+            "p95": 83.623305,
+            "p99": 87.617523
+          },
+          "end_to_end_seconds": {
+            "p50": 188.414332,
+            "p95": 257.165151,
+            "p99": 332.358974
+          },
+          "corpus_age_seconds": {
+            "p50": 147.0,
+            "p95": 197.0,
+            "p99": 283.05
+          },
+          "processing_max_seconds": 88.470084,
+          "end_to_end_max_seconds": 1885.713324
+        }
+      }
+    ],
+    "order": [
+      "development",
+      "durable",
+      "durable",
+      "development"
+    ],
+    "development": {
+      "mean": 33.79,
+      "min": 32.33,
+      "max": 35.26,
+      "spread": 2.92,
+      "passes": 2
+    },
+    "durable": {
+      "mean": 37.42,
+      "min": 34.23,
+      "max": 40.6,
+      "spread": 6.37,
+      "passes": 2
+    },
+    "inflation_factor": 0.903,
+    "separation_per_second": 3.63,
+    "noise_floor_per_second": 6.37,
+    "difference_is_resolved": false
+  },
+  "notes": [
+    "No difference was resolved: fsync off ran at 33.8/s and fsync on at 37.4/s, a gap of 3.6/s against a run-to-run spread of 6.4/s. At this pipeline's throughput that is the expected result rather than a surprising one -- the handler makes several database round trips per event and is bound by those, not by how each transaction is flushed, so the commit cost fsync adds is small against what the pipeline is already spending. It does NOT mean fsync is free: it means this workload is not where it shows up, and a bulk-loading or higher-throughput path on the same database would look different.",
+    "The fsync=off caveat on every other figure stands regardless. What this measures is how much that caveat is worth for this workload on this machine, which turns out to be less than one would assume.",
+    "Both configurations are vacuumed before every pass and the order is alternated. Without that the development database -- which absorbs every experiment in the project -- carries the session's dead tuples into the comparison, and the first run of this reported fsync=on as the faster configuration.",
+    "Both passes use the same broker, the same processor and the same backlog; the database is the only thing that changes.",
+    "This is one machine's NVMe SSD, not a cloud disk."
+  ]
+}

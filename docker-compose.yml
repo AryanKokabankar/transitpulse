@@ -50,6 +50,50 @@ services:
       timeout: 3s
       retries: 20
 
+  # The same Postgres with durability left switched ON, for one purpose: to
+  # measure what `fsync=off` above is worth. Every write-path number this
+  # project publishes comes from a database that does not wait for the disk,
+  # which inflates it against any deployment whose data matters -- and "it is
+  # faster" is not a measurement, so BENCHMARKS.md quotes both.
+  #
+  # Behind a profile, so `docker compose up` does not start it:
+  #   docker compose --profile durable up -d postgres-durable
+  #   python tasks.py durability
+  #
+  # Its own volume, because initdb refuses a directory another cluster owns,
+  # and a tmpfs would defeat the point entirely.
+  postgres-durable:
+    profiles: ["durable"]
+    image: postgres:16-alpine
+    container_name: tp-postgres-durable
+    environment:
+      POSTGRES_USER: transitpulse
+      POSTGRES_PASSWORD: transitpulse
+      POSTGRES_DB: transitpulse
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    # No fsync or synchronous_commit overrides: these are Postgres's own
+    # defaults (both on). The rest is kept identical to the service above so
+    # the only difference between the two measurements is durability.
+    command:
+      - postgres
+      - -c
+      - max_connections=200
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata-durable:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U transitpulse -d transitpulse"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
   pubsub:
     image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
     container_name: tp-pubsub
@@ -120,6 +164,14 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
       GF_USERS_DEFAULT_THEME: light
+      # Where to send /render requests. Grafana itself cannot rasterise a
+      # panel -- asked to, it answers 200 with a PNG that reads "No image
+      # renderer available", which is a success code carrying a failure and
+      # exactly the kind of thing this project checks rather than assumes.
+      # Harmless when the renderer is not running: nothing calls /render
+      # except the screenshot tool.
+      GF_RENDERING_SERVER_URL: http://renderer:8081/render
+      GF_RENDERING_CALLBACK_URL: http://grafana:3000/
     volumes:
       - ./observability/grafana:/etc/grafana/provisioning:ro
     ports:
@@ -127,5 +179,29 @@ services:
     depends_on:
       - prometheus
 
+  # Headless Chromium that turns a dashboard panel into a PNG. Behind a
+  # profile because it is a few hundred megabytes and nothing but the
+  # screenshot tool needs it:
+  #
+  #   docker compose --profile rendering up -d renderer
+  #   python tasks.py screenshots
+  #
+  # No published port: Grafana reaches it over the compose network, and
+  # exposing a headless browser that fetches arbitrary URLs on request is not
+  # something to do by default.
+  renderer:
+    profiles: ["rendering"]
+    image: grafana/grafana-image-renderer:v5.12.6
+    container_name: tp-renderer
+    environment:
+      RENDERING_MODE: default
+      # The panels are dark-on-dark by default and the committed screenshots
+      # are read on a light page, so the tool asks for the light theme per
+      # request; this only sets the default viewport.
+      RENDERING_VIEWPORT_DEVICE_SCALE_FACTOR: "2"
+    expose:
+      - "8081"
+
 volumes:
   pgdata:
+  pgdata-durable:

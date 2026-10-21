@@ -1,0 +1,73 @@
+{
+  "captured_at": "2026-10-21T18:33:05.255774+00:00",
+  "dashboard_uid": "transitpulse-pipeline",
+  "window": "now-45m to now",
+  "theme": "light",
+  "scale": 2,
+  "panels": [
+    {
+      "slug": "slo-compliance",
+      "panel_id": 1,
+      "title": "SLO compliance - events processed within 2s",
+      "file": "docs/dashboards/slo-compliance.png",
+      "pixels": "2000x1000",
+      "bytes": 61608
+    },
+    {
+      "slug": "ingest-lag-p95",
+      "panel_id": 2,
+      "title": "Ingest lag p95",
+      "file": "docs/dashboards/ingest-lag-p95.png",
+      "pixels": "2000x1000",
+      "bytes": 71449
+    },
+    {
+      "slug": "ingest-lag-percentiles",
+      "panel_id": 5,
+      "title": "Ingest lag percentiles",
+      "file": "docs/dashboards/ingest-lag-percentiles.png",
+      "pixels": "2000x1000",
+      "bytes": 94760
+    },
+    {
+      "slug": "quarantined-by-reason",
+      "panel_id": 7,
+      "title": "Quarantined events by reason",
+      "file": "docs/dashboards/quarantined-by-reason.png",
+      "pixels": "2000x1000",
+      "bytes": 159497
+    },
+    {
+      "slug": "delivery-outcome-rate",
+      "panel_id": 8,
+      "title": "Delivery outcome rate",
+      "file": "docs/dashboards/delivery-outcome-rate.png",
+      "pixels": "2000x1000",
+      "bytes": 207096
+    },
+    {
+      "slug": "events-dead-lettered",
+      "panel_id": 4,
+      "title": "Events dead-lettered (10m)",
+      "file": "docs/dashboards/events-dead-lettered.png",
+      "pixels": "2000x1000",
+      "bytes": 37203
+    },
+    {
+      "slug": "error-budget-burn",
+      "panel_id": 15,
+      "title": "Error budget burn rate",
+      "file": "docs/dashboards/error-budget-burn.png",
+      "pixels": "2000x1000",
+      "bytes": 89273
+    },
+    {
+      "slug": "pipeline-health",
+      "panel_id": null,
+      "title": "The whole dashboard",
+      "file": "docs/dashboards/pipeline-health.png",
+      "pixels": "2800x3400",
+      "bytes": 666754
+    }
+  ]
+}

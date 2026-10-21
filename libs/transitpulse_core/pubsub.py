@@ -186,6 +186,7 @@ def ensure_local_topology(settings: Settings | None = None) -> None:
     main_topic = publisher.topic_path(cfg.gcp_project, cfg.topic_vehicle_events)
     dlq_topic = publisher.topic_path(cfg.gcp_project, cfg.topic_dlq)
     subscription = subscriber.subscription_path(cfg.gcp_project, cfg.subscription_processor)
+    dlq_subscription = subscriber.subscription_path(cfg.gcp_project, cfg.subscription_dlq)
 
     for topic in (main_topic, dlq_topic):
         try:
@@ -210,6 +211,24 @@ def ensure_local_topology(settings: Settings | None = None) -> None:
         log.info("topology.subscription_created", subscription=subscription)
     except Exception:  # noqa: BLE001 - AlreadyExists is the happy path here
         log.debug("topology.subscription_exists", subscription=subscription)
+
+    try:
+        subscriber.create_subscription(
+            request={
+                "name": dlq_subscription,
+                "topic": dlq_topic,
+                # No ordering and no dead-letter policy of its own, both
+                # deliberately. Ordered delivery would serialise the replayer
+                # per vehicle for no benefit -- order is re-established by the
+                # ordering key when it republishes to the main topic -- and a
+                # dead-letter policy on a dead-letter subscription is a loop
+                # with nowhere left to send a message that keeps failing.
+                "ack_deadline_seconds": 60,
+            }
+        )
+        log.info("topology.dlq_subscription_created", subscription=dlq_subscription)
+    except Exception:  # noqa: BLE001 - AlreadyExists is the happy path here
+        log.debug("topology.dlq_subscription_exists", subscription=dlq_subscription)
 
 
 def decode_push_body(body: bytes) -> PushEnvelope:

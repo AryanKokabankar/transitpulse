@@ -203,6 +203,26 @@ def task_partitions(args: argparse.Namespace) -> None:
     run([str(venv_python()), "-m", "services.jobs.partition_maintenance", *args.rest])
 
 
+def task_replay_dlq(args: argparse.Namespace) -> None:
+    """Re-validate dead-lettered events and republish the ones that now pass."""
+    run([str(venv_python()), "-m", "services.jobs.dlq_replayer", *args.rest])
+
+
+def task_chaos(args: argparse.Namespace) -> None:
+    """Run a chaos experiment: `chaos -- --list` or `chaos -- kill-processor`."""
+    run([str(venv_python()), "-m", "tools.chaos", *args.rest], check=False)
+
+
+def task_durability(args: argparse.Namespace) -> None:
+    """Compare write throughput against fsync=off and fsync=on Postgres."""
+    run([str(venv_python()), "-m", "tools.durability", *args.rest], check=False)
+
+
+def task_screenshots(args: argparse.Namespace) -> None:
+    """Capture the dashboard panels as verified PNGs under docs/dashboards/."""
+    run([str(venv_python()), "-m", "tools.screenshots", *args.rest], check=False)
+
+
 def task_rules(_: argparse.Namespace) -> None:
     """Validate the Prometheus rules and run their promtool unit tests.
 
@@ -300,6 +320,10 @@ TASKS = {
     "bridge": task_bridge,
     "smoke": task_smoke,
     "partitions": task_partitions,
+    "replay-dlq": task_replay_dlq,
+    "chaos": task_chaos,
+    "durability": task_durability,
+    "screenshots": task_screenshots,
     "rules": task_rules,
     "lint": task_lint,
     "fmt": task_fmt,

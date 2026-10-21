@@ -1,0 +1,89 @@
+{
+  "scenario": "malformed-feed",
+  "question": "Does every injected bad record turn up as a rejection, with the good ones unharmed?",
+  "passed": true,
+  "started_at": "2026-10-21T16:24:44.952731+00:00",
+  "seconds": 55.75,
+  "checks": [
+    {
+      "name": "the quarantine count rose by exactly the injected count",
+      "passed": true,
+      "detail": "expected 73, measured 73"
+    },
+    {
+      "name": "nothing is unaccounted for: published + quarantined == vehicle entities",
+      "passed": true,
+      "detail": "expected 367, measured 367"
+    },
+    {
+      "name": "the valid entities in the same feed were still published",
+      "passed": true,
+      "detail": "expected 294, measured 294"
+    },
+    {
+      "name": "every rejection was persisted beside the payload that caused it",
+      "passed": true,
+      "detail": "expected 73, measured 73"
+    },
+    {
+      "name": "the null-island rejections are labelled as such, not as schema failures",
+      "passed": true,
+      "detail": "expected at least 25, measured 25"
+    },
+    {
+      "name": "every bad payload from the broker reached the quarantine table",
+      "passed": true,
+      "detail": "expected 3, measured 3"
+    },
+    {
+      "name": "the good events from the same run landed as rows",
+      "passed": true,
+      "detail": "expected 294, measured 294"
+    },
+    {
+      "name": "the exported quarantine counter rose by at least the injected count",
+      "passed": true,
+      "detail": "expected at least 76, measured 149.0"
+    }
+  ],
+  "measurements": {
+    "agency": "chaos-malformed-ff8631",
+    "snapshot_bytes": 43914,
+    "vehicle_entities": 367,
+    "baseline_valid": 367,
+    "baseline_quarantined": 0,
+    "corrupt_every": 5,
+    "injected": 73,
+    "injected_by_corruption": {
+      "null_island": 25,
+      "bearing_out_of_range": 24,
+      "position_missing": 24
+    },
+    "collector_published": 294,
+    "collector_quarantined": 73,
+    "collector_entity_count": 367,
+    "collector_vehicle_entity_count": 367,
+    "collector_fetch_seconds": 0.063,
+    "sidecar_records": 73,
+    "sidecar_reasons": {
+      "NULL_ISLAND": 25,
+      "SCHEMA_VALIDATION": 48
+    },
+    "snapshot_path": "chaos-malformed-ff8631/2026/10/21/162513-9b5952266586.pb",
+    "bad_producer_payloads": 3,
+    "delivered": 297,
+    "processed": 294,
+    "bridge_quarantined": 3,
+    "rows_in_vehicle_events": 294,
+    "quarantine_rows_written": 3,
+    "expected_rows": 294,
+    "quarantined_counter_before": 0.0,
+    "quarantined_counter_after": 149.0,
+    "quarantined_counter_delta": 149.0
+  },
+  "notes": [
+    "The exported counter is a lower bound, not an equality: it is cumulative across processes and the drivers here are short-lived, so a count that has not been exported yet is missing rather than wrong.",
+    "Only entities the decoder accepted in the baseline were corrupted; breaking one that was already being rejected would change no count and the experiment would pass having measured nothing.",
+    "The collector writes its rejections to the snapshot archive, not to Postgres -- it deliberately has no database (ADR-006) -- which is why the feed path is checked against the sidecar and the broker path against the table."
+  ]
+}

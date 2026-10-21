@@ -65,6 +65,11 @@ class Settings(BaseSettings):
     topic_vehicle_events: str = "vehicle-events"
     subscription_processor: str = "vehicle-events-processor"
     topic_dlq: str = "vehicle-events-dlq"
+    # The dead-letter topic needs a subscription of its own or the messages
+    # the broker moves there are unreachable: a topic with no subscription
+    # discards what is published to it, so "nothing is dropped silently" would
+    # fail at the one hop that exists to prevent it. Read by the replayer job.
+    subscription_dlq: str = "vehicle-events-dlq-replayer"
     # Shared by the subscription's dead-letter policy and the processor's
     # poison-message guard. They have to agree: if the handler gave up later
     # than the broker dead-letters, the quarantine row would never be written,

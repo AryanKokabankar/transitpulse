@@ -1,0 +1,137 @@
+{
+  "scenario": "feed-failure",
+  "question": "Does the breaker open, actually stop calling upstream, and recover on its own?",
+  "passed": true,
+  "started_at": "2026-10-21T16:21:02.419949+00:00",
+  "seconds": 29.344,
+  "checks": [
+    {
+      "name": "the breaker opened on the threshold tick",
+      "passed": true,
+      "detail": "expected 'OPEN', measured 'OPEN'"
+    },
+    {
+      "name": "each failing tick spent its whole retry budget before counting",
+      "passed": true,
+      "detail": "expected 20, measured 20"
+    },
+    {
+      "name": "the upstream was not called again while the breaker was open",
+      "passed": true,
+      "detail": "expected 0, measured 0"
+    },
+    {
+      "name": "every tick arriving at an open breaker was rejected outright",
+      "passed": true,
+      "detail": "expected 5, measured 5"
+    },
+    {
+      "name": "the rejection carried a cooldown to wait out",
+      "passed": true,
+      "detail": "expected at least 0.1, measured 2.983999999999469"
+    },
+    {
+      "name": "the half-open probe was admitted once the cooldown elapsed",
+      "passed": true,
+      "detail": "expected 1, measured 1"
+    },
+    {
+      "name": "the breaker closed on a successful probe",
+      "passed": true,
+      "detail": "expected 'CLOSED', measured 'CLOSED'"
+    },
+    {
+      "name": "a hung upstream is labelled a timeout, not a transport error",
+      "passed": true,
+      "detail": "expected 5, measured 5"
+    },
+    {
+      "name": "the breaker opened on hung connections too",
+      "passed": true,
+      "detail": "expected 'OPEN', measured 'OPEN'"
+    },
+    {
+      "name": "no further connection was opened to the hung upstream",
+      "passed": true,
+      "detail": "expected 0, measured 0"
+    },
+    {
+      "name": "a tick that cannot reach the agency is reported as a bad gateway",
+      "passed": true,
+      "detail": "expected [502, 502, 502, 502, 502], measured [502, 502, 502, 502, 502]"
+    },
+    {
+      "name": "a tick arriving at an open breaker is reported as unavailable",
+      "passed": true,
+      "detail": "expected 503, measured 503"
+    },
+    {
+      "name": "the 503 tells the scheduler how long to wait",
+      "passed": true,
+      "detail": "Retry-After: '2'"
+    }
+  ],
+  "measurements": {
+    "started": "2026-10-21T16:21:02.419949+00:00",
+    "breaker_threshold": 5,
+    "feed_max_attempts": 4,
+    "ticks_until_open": 5,
+    "upstream_requests_before_open": 20,
+    "state_after_threshold": "OPEN",
+    "retry_after_seconds": 2.98,
+    "ticks_while_open": 5,
+    "upstream_requests_while_open": 0,
+    "failing_ticks": {
+      "ok": 0,
+      "failed": 5,
+      "rejected_by_breaker": 0,
+      "kinds": {
+        "http_error": 5
+      }
+    },
+    "open_ticks": {
+      "ok": 0,
+      "failed": 0,
+      "rejected_by_breaker": 5,
+      "kinds": {}
+    },
+    "recovery_tick": {
+      "ok": 1,
+      "failed": 0,
+      "rejected_by_breaker": 0,
+      "kinds": {}
+    },
+    "state_after_recovery": "CLOSED",
+    "upstream_requests_for_probe": 1,
+    "timeout_seconds": 0.4,
+    "timeout_ticks": {
+      "ok": 0,
+      "failed": 5,
+      "rejected_by_breaker": 0,
+      "kinds": {
+        "timeout": 5
+      }
+    },
+    "timeout_state_after_threshold": "OPEN",
+    "timeout_requests_while_open": 0,
+    "timeout_open_ticks": {
+      "ok": 0,
+      "failed": 0,
+      "rejected_by_breaker": 5,
+      "kinds": {}
+    },
+    "collect_statuses_while_failing": [
+      502,
+      502,
+      502,
+      502,
+      502
+    ],
+    "collect_status_once_open": 503,
+    "collect_retry_after": "2"
+  },
+  "notes": [
+    "The breaker cooldown is shortened from 60s to 3s so a run finishes in seconds. The breaker counts whole calls rather than retry attempts, so neither the cooldown nor the retry budget changes the behaviour being measured -- only how long it takes to observe.",
+    "The upstream here is a loopback server that counts its own requests. That count, not the breaker's reported state, is what shows the calls really stopped."
+  ]
+}

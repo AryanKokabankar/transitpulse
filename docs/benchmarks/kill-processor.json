@@ -1,0 +1,112 @@
+{
+  "scenario": "kill-processor",
+  "question": "Does the queue absorb the backlog, and does every published event still land?",
+  "passed": true,
+  "started_at": "2026-10-21T16:30:22.837559+00:00",
+  "seconds": 123.234,
+  "checks": [
+    {
+      "name": "every ping was accepted by the broker",
+      "passed": true,
+      "detail": "expected 2000, measured 2000"
+    },
+    {
+      "name": "the processor consumed some of the stream first",
+      "passed": true,
+      "detail": "expected at least 1, measured 1960"
+    },
+    {
+      "name": "the queue still held the rest when it died",
+      "passed": true,
+      "detail": "expected at least 1, measured 40"
+    },
+    {
+      "name": "deliveries were refused while it was down",
+      "passed": true,
+      "detail": "expected at least 1, measured 200"
+    },
+    {
+      "name": "each held-back message was refused its whole delivery budget",
+      "passed": true,
+      "detail": "expected at least 200, measured 200"
+    },
+    {
+      "name": "the broker gave up on the held-back messages, as intended",
+      "passed": true,
+      "detail": "expected at least 1, measured 40"
+    },
+    {
+      "name": "everything the queue still held was dead-lettered, not lost",
+      "passed": true,
+      "detail": "expected 40, measured 40"
+    },
+    {
+      "name": "the replayer recovered every dead letter",
+      "passed": true,
+      "detail": "expected 40, measured 40"
+    },
+    {
+      "name": "nothing was left on the dead-letter topic",
+      "passed": true,
+      "detail": "expected 0, measured 0"
+    },
+    {
+      "name": "zero loss: rows written equals events published",
+      "passed": true,
+      "detail": "expected 2000, measured 2000"
+    },
+    {
+      "name": "nothing was quarantined",
+      "passed": true,
+      "detail": "expected 0, measured 0"
+    },
+    {
+      "name": "one live row per distinct vehicle",
+      "passed": true,
+      "detail": "expected 448, measured 448"
+    }
+  ],
+  "measurements": {
+    "agency": "chaos-kill-b337a7",
+    "drained_before": {
+      "vehicle-events-processor": 0,
+      "vehicle-events-dlq-replayer": 0
+    },
+    "requested": 2000,
+    "published": 2000,
+    "corpus_pings": 2573,
+    "corpus_distinct_keys": 1925,
+    "corpus_event_time_span_seconds": 1827.0,
+    "processed_before_kill": 1960,
+    "left_unconsumed_at_kill": 40,
+    "backlog_at_kill": 40,
+    "outage_seconds": 15.77,
+    "deliveries_refused_during_outage": 200,
+    "processed_after_restart": 0,
+    "processor_starts": 2,
+    "processor_kills": 1,
+    "dead_lettered": 40,
+    "replayer": {
+      "pulled": 40,
+      "republished": 40,
+      "still_invalid": 0,
+      "failed": 0,
+      "quarantine_rows_marked": 0,
+      "payloads_without_quarantine_row": 40,
+      "invalid_reasons": {},
+      "dry_run": false,
+      "seconds": 6.35
+    },
+    "processed_after_replay": 40,
+    "dead_letters_remaining": 0,
+    "rows_in_vehicle_events": 2000,
+    "rows_in_vehicle_live": 448,
+    "distinct_vehicles": 448,
+    "quarantined_during_run": 0,
+    "killed_at": "2026-10-21T16:31:38.285767+00:00"
+  },
+  "notes": [
+    "The corpus is filtered to one ping per idempotency key before publishing, so rows == published is a reachable assertion; a raw multi-snapshot capture re-sends about a third of its own observations and those deduplicate by design (experiment 4 measures that deliberately).",
+    "The local bridge retries a refused delivery immediately with no backoff, so the delivery budget is consumed faster here than a real push subscription would consume it. That makes dead-lettering easier to provoke, which is the point, but the outage duration is not comparable to a production one."
+  ]
+}

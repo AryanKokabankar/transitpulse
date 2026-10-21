@@ -1,0 +1,89 @@
+{
+  "scenario": "duplicate-batch",
+  "question": "Does an exact duplicate batch write nothing, and is it counted as a duplicate?",
+  "passed": true,
+  "started_at": "2026-10-21T16:21:40.936756+00:00",
+  "seconds": 80.547,
+  "checks": [
+    {
+      "name": "the first pass wrote one row per distinct key",
+      "passed": true,
+      "detail": "expected 1000, measured 1000"
+    },
+    {
+      "name": "the second pass was delivered in full, not skipped",
+      "passed": true,
+      "detail": "expected 1000, measured 1000"
+    },
+    {
+      "name": "the duplicate batch added no history rows",
+      "passed": true,
+      "detail": "expected 0, measured 0"
+    },
+    {
+      "name": "the duplicate batch added no live rows",
+      "passed": true,
+      "detail": "expected 368, measured 368"
+    },
+    {
+      "name": "one live row per distinct vehicle",
+      "passed": true,
+      "detail": "expected 368, measured 368"
+    },
+    {
+      "name": "the duplicates were not quarantined",
+      "passed": true,
+      "detail": "expected 0, measured 0"
+    },
+    {
+      "name": "the deduplication counter rose, so the rows were collapsed and not lost",
+      "passed": true,
+      "detail": "expected at least 1.0, measured 1000.0"
+    }
+  ],
+  "measurements": {
+    "agency": "chaos-dup-d07adf",
+    "batch_size": 1000,
+    "distinct_keys": 1000,
+    "distinct_vehicles": 368,
+    "first_published": 1000,
+    "first_delivered": 1000,
+    "first_processed": 1000,
+    "rows_after_first": 1000,
+    "live_after_first": 368,
+    "second_published": 1000,
+    "second_delivered": 1000,
+    "second_processed": 1000,
+    "rows_after_second": 1000,
+    "live_after_second": 368,
+    "rows_added_by_the_duplicate": 0,
+    "quarantined_during_run": 0,
+    "latency": {
+      "rows": 1000,
+      "processing_seconds": {
+        "p50": 8.796694,
+        "p95": 15.167235,
+        "p99": 15.753214
+      },
+      "end_to_end_seconds": {
+        "p50": 166.168394,
+        "p95": 212.440992,
+        "p99": 307.70347
+      },
+      "corpus_age_seconds": {
+        "p50": 155.0,
+        "p95": 203.05,
+        "p99": 299.03
+      },
+      "processing_max_seconds": 15.793837,
+      "end_to_end_max_seconds": 1831.137992
+    },
+    "deduped_counter_before": 0.0,
+    "deduped_counter_after": 1000.0,
+    "deduped_counter_delta": 1000.0
+  },
+  "notes": [
+    "The batch is published twice and delivered twice, sequentially. Concurrently the pair could interleave so that neither insert saw the other, which would measure a race rather than the idempotency key.",
+    "The key excludes ingest_time by design (ADR-005), which is what makes a replay of the archived corpus safe; this run is the end-to-end demonstration of that, and a unit test pins the key's composition."
+  ]
+}

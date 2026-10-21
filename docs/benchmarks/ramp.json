@@ -1,0 +1,511 @@
+{
+  "scenario": "ramp",
+  "question": "Where does the pipeline stop keeping up, and which stage gives out first?",
+  "passed": true,
+  "started_at": "2026-10-21T17:52:39.657379+00:00",
+  "seconds": 1349.766,
+  "checks": [
+    {
+      "name": "the publish ladder reached a real ceiling",
+      "passed": true,
+      "detail": "the ladder broke at 1,500/s (60.3% of target)"
+    },
+    {
+      "name": "the harness can generate work faster than the publisher can send it",
+      "passed": true,
+      "detail": "expected at least 981.2139440856438 msg/s, measured 16014.376996805717 msg/s"
+    },
+    {
+      "name": "zero loss draining 3,000 at concurrency 4",
+      "passed": true,
+      "detail": "expected 3000, measured 3000"
+    },
+    {
+      "name": "zero loss draining 3,000 at concurrency 16",
+      "passed": true,
+      "detail": "expected 3000, measured 3000"
+    },
+    {
+      "name": "zero loss draining 3,000 at concurrency 32",
+      "passed": true,
+      "detail": "expected 3000, measured 3000"
+    },
+    {
+      "name": "zero loss draining 3,000 at concurrency 64",
+      "passed": true,
+      "detail": "expected 3000, measured 3000"
+    },
+    {
+      "name": "zero loss at steady state",
+      "passed": true,
+      "detail": "expected 3000, measured 3000"
+    },
+    {
+      "name": "a processing latency was actually measured",
+      "passed": true,
+      "detail": "expected at least 0.0 s, measured 0.715099 s"
+    }
+  ],
+  "measurements": {
+    "started": "2026-10-21T17:52:39.657379+00:00",
+    "rates_attempted": [
+      250.0,
+      500.0,
+      750.0,
+      1000.0,
+      1500.0,
+      2000.0
+    ],
+    "pacing_rates_attempted": "1000,4000,16000",
+    "seconds_per_step": 20.0,
+    "min_accuracy": 0.95,
+    "workers": 4,
+    "fanout": 4,
+    "pacing_ladder": [
+      {
+        "target_per_second": 1000.0,
+        "achieved_per_second": 1003.4,
+        "accuracy": 1.0034,
+        "publisher_bound": false,
+        "limiter_wait_seconds": 19.907,
+        "published": 20100,
+        "failed": 0,
+        "publish_latency_ms": {}
+      },
+      {
+        "target_per_second": 4000.0,
+        "achieved_per_second": 4020.0,
+        "accuracy": 1.005,
+        "publisher_bound": false,
+        "limiter_wait_seconds": 19.798,
+        "published": 80400,
+        "failed": 0,
+        "publish_latency_ms": {}
+      },
+      {
+        "target_per_second": 16000.0,
+        "achieved_per_second": 16014.4,
+        "accuracy": 1.0009,
+        "publisher_bound": false,
+        "limiter_wait_seconds": 17.914,
+        "published": 320800,
+        "failed": 0,
+        "publish_latency_ms": {}
+      }
+    ],
+    "pacing_ceiling_per_second": 16014.4,
+    "publish_ladder": [
+      {
+        "target_per_second": 250.0,
+        "achieved_per_second": 250.2,
+        "accuracy": 1.0009,
+        "publisher_bound": false,
+        "limiter_wait_seconds": 19.798,
+        "published": 5028,
+        "failed": 0,
+        "publish_latency_ms": {
+          "p50": 7.833,
+          "p95": 17.0,
+          "p99": 20.833
+        }
+      },
+      {
+        "target_per_second": 500.0,
+        "achieved_per_second": 497.7,
+        "accuracy": 0.9954,
+        "publisher_bound": false,
+        "limiter_wait_seconds": 18.906,
+        "published": 10000,
+        "failed": 0,
+        "publish_latency_ms": {
+          "p50": 6.28,
+          "p95": 10.64,
+          "p99": 12.52
+        }
+      },
+      {
+        "target_per_second": 750.0,
+        "achieved_per_second": 748.5,
+        "accuracy": 0.9979,
+        "publisher_bound": false,
+        "limiter_wait_seconds": 19.89,
+        "published": 15086,
+        "failed": 0,
+        "publish_latency_ms": {
+          "p50": 4.526,
+          "p95": 6.974,
+          "p99": 8.632
+        }
+      },
+      {
+        "target_per_second": 1000.0,
+        "achieved_per_second": 981.2,
+        "accuracy": 0.9812,
+        "publisher_bound": false,
+        "limiter_wait_seconds": 18.141,
+        "published": 19900,
+        "failed": 0,
+        "publish_latency_ms": {
+          "p50": 3.76,
+          "p95": 5.64,
+          "p99": 7.82
+        }
+      },
+      {
+        "target_per_second": 1500.0,
+        "achieved_per_second": 903.9,
+        "accuracy": 0.6026,
+        "publisher_bound": false,
+        "limiter_wait_seconds": 3.576,
+        "published": 18600,
+        "failed": 0,
+        "publish_latency_ms": {
+          "p50": 4.173,
+          "p95": 6.667,
+          "p99": 7.707
+        }
+      }
+    ],
+    "publisher_ceiling_per_second": 981.2,
+    "publisher_last_sustained_per_second": 981.2,
+    "pacing_ladder_broke": false,
+    "pacing_ladder_verdict": "the top rung (16,000/s) still met its target at 100.1%; this is a floor, not a ceiling",
+    "publisher_capacity_from_latency_per_second": 958.5,
+    "publisher_bound_flag_at_break": false,
+    "limiter_wait_at_break_seconds": 3.576,
+    "publisher_capacity_agreement": 1.06,
+    "concurrency_ladder": [
+      {
+        "concurrency": 4,
+        "pg_pool_max": 10,
+        "pg_dsn_host": "localhost:5432",
+        "processor": "separate process",
+        "backlog": 3000,
+        "published": 3000,
+        "processed": 3000,
+        "rows_written": 3000,
+        "publish_seconds": 3.5,
+        "drain_seconds": 99.859,
+        "drain_per_second": 30.0,
+        "latency": {
+          "rows": 3000,
+          "processing_seconds": {
+            "p50": 54.143168,
+            "p95": 98.669913,
+            "p99": 102.379281
+          },
+          "end_to_end_seconds": {
+            "p50": 201.550542,
+            "p95": 272.689224,
+            "p99": 346.701298
+          },
+          "corpus_age_seconds": {
+            "p50": 147.0,
+            "p95": 197.0,
+            "p99": 283.05
+          },
+          "processing_max_seconds": 103.334202,
+          "end_to_end_max_seconds": 1900.675311
+        }
+      },
+      {
+        "concurrency": 16,
+        "pg_pool_max": 10,
+        "pg_dsn_host": "localhost:5432",
+        "processor": "separate process",
+        "backlog": 3000,
+        "published": 3000,
+        "processed": 3000,
+        "rows_written": 3000,
+        "publish_seconds": 3.61,
+        "drain_seconds": 60.61,
+        "drain_per_second": 49.5,
+        "latency": {
+          "rows": 3000,
+          "processing_seconds": {
+            "p50": 33.548146,
+            "p95": 62.099785,
+            "p99": 63.890645
+          },
+          "end_to_end_seconds": {
+            "p50": 183.322039,
+            "p95": 240.844556,
+            "p99": 319.368809
+          },
+          "corpus_age_seconds": {
+            "p50": 147.0,
+            "p95": 197.0,
+            "p99": 283.05
+          },
+          "processing_max_seconds": 64.215029,
+          "end_to_end_max_seconds": 1873.485197
+        }
+      },
+      {
+        "concurrency": 32,
+        "pg_pool_max": 10,
+        "pg_dsn_host": "localhost:5432",
+        "processor": "separate process",
+        "backlog": 3000,
+        "published": 3000,
+        "processed": 3000,
+        "rows_written": 3000,
+        "publish_seconds": 3.531,
+        "drain_seconds": 71.485,
+        "drain_per_second": 42.0,
+        "latency": {
+          "rows": 3000,
+          "processing_seconds": {
+            "p50": 40.158483,
+            "p95": 71.511106,
+            "p99": 74.47912
+          },
+          "end_to_end_seconds": {
+            "p50": 188.826076,
+            "p95": 248.741044,
+            "p99": 328.904418
+          },
+          "corpus_age_seconds": {
+            "p50": 147.0,
+            "p95": 197.0,
+            "p99": 283.05
+          },
+          "processing_max_seconds": 75.004182,
+          "end_to_end_max_seconds": 1880.581685
+        }
+      },
+      {
+        "concurrency": 64,
+        "pg_pool_max": 10,
+        "pg_dsn_host": "localhost:5432",
+        "processor": "separate process",
+        "backlog": 3000,
+        "published": 3000,
+        "processed": 3000,
+        "rows_written": 3000,
+        "publish_seconds": 3.297,
+        "drain_seconds": 83.765,
+        "drain_per_second": 35.8,
+        "latency": {
+          "rows": 3000,
+          "processing_seconds": {
+            "p50": 39.478588,
+            "p95": 82.48019,
+            "p99": 86.360228
+          },
+          "end_to_end_seconds": {
+            "p50": 188.088763,
+            "p95": 255.983889,
+            "p99": 330.874197
+          },
+          "corpus_age_seconds": {
+            "p50": 147.0,
+            "p95": 197.0,
+            "p99": 283.05
+          },
+          "processing_max_seconds": 87.025125,
+          "end_to_end_max_seconds": 1883.185213
+        }
+      }
+    ],
+    "consumer_ceiling_per_second": 49.5,
+    "consumer_best_concurrency": 16,
+    "pool_ladder": [
+      {
+        "concurrency": 16,
+        "pg_pool_max": 2,
+        "pg_dsn_host": "localhost:5432",
+        "processor": "separate process",
+        "backlog": 3000,
+        "published": 3000,
+        "processed": 3000,
+        "rows_written": 3000,
+        "publish_seconds": 3.391,
+        "drain_seconds": 163.203,
+        "drain_per_second": 18.4,
+        "latency": {
+          "rows": 3000,
+          "processing_seconds": {
+            "p50": 85.454801,
+            "p95": 158.158137,
+            "p99": 164.853198
+          },
+          "end_to_end_seconds": {
+            "p50": 230.495295,
+            "p95": 328.026405,
+            "p99": 395.779751
+          },
+          "corpus_age_seconds": {
+            "p50": 147.0,
+            "p95": 197.0,
+            "p99": 283.05
+          },
+          "processing_max_seconds": 166.460122,
+          "end_to_end_max_seconds": 1943.320618
+        }
+      },
+      {
+        "concurrency": 16,
+        "pg_pool_max": 10,
+        "pg_dsn_host": "localhost:5432",
+        "processor": "separate process",
+        "backlog": 3000,
+        "published": 3000,
+        "processed": 3000,
+        "rows_written": 3000,
+        "publish_seconds": 3.688,
+        "drain_seconds": 56.375,
+        "drain_per_second": 53.2,
+        "latency": {
+          "rows": 3000,
+          "processing_seconds": {
+            "p50": 35.299915,
+            "p95": 57.753084,
+            "p99": 59.678075
+          },
+          "end_to_end_seconds": {
+            "p50": 184.233993,
+            "p95": 238.830907,
+            "p99": 321.696151
+          },
+          "corpus_age_seconds": {
+            "p50": 147.0,
+            "p95": 197.0,
+            "p99": 283.05
+          },
+          "processing_max_seconds": 60.029244,
+          "end_to_end_max_seconds": 1872.220546
+        }
+      },
+      {
+        "concurrency": 16,
+        "pg_pool_max": 30,
+        "pg_dsn_host": "localhost:5432",
+        "processor": "separate process",
+        "backlog": 3000,
+        "published": 3000,
+        "processed": 3000,
+        "rows_written": 3000,
+        "publish_seconds": 3.625,
+        "drain_seconds": 44.921,
+        "drain_per_second": 66.8,
+        "latency": {
+          "rows": 3000,
+          "processing_seconds": {
+            "p50": 26.012971,
+            "p95": 46.602501,
+            "p99": 48.162175
+          },
+          "end_to_end_seconds": {
+            "p50": 176.155776,
+            "p95": 228.715712,
+            "p99": 315.481641
+          },
+          "corpus_age_seconds": {
+            "p50": 147.0,
+            "p95": 197.0,
+            "p99": 283.05
+          },
+          "processing_max_seconds": 48.489033,
+          "end_to_end_max_seconds": 1861.931966
+        }
+      }
+    ],
+    "configured_pool_max": 10,
+    "pool_headroom_ratio": 1.255,
+    "pool_starvation_ratio": 2.895,
+    "pool_is_the_constraint": true,
+    "pool_attribution_is_marginal": true,
+    "in_process_drain": {
+      "concurrency": 16,
+      "pg_pool_max": 10,
+      "pg_dsn_host": "localhost:5432",
+      "processor": "in-process",
+      "backlog": 3000,
+      "published": 3000,
+      "processed": 3000,
+      "rows_written": 3000,
+      "publish_seconds": 3.218,
+      "drain_seconds": 40.672,
+      "drain_per_second": 73.8,
+      "latency": {
+        "rows": 3000,
+        "processing_seconds": {
+          "p50": 23.826496,
+          "p95": 42.002048,
+          "p99": 43.75496
+        },
+        "end_to_end_seconds": {
+          "p50": 173.47294,
+          "p95": 225.431924,
+          "p99": 312.062352
+        },
+        "corpus_age_seconds": {
+          "p50": 147.0,
+          "p95": 197.0,
+          "p99": 283.05
+        },
+        "processing_max_seconds": 44.248539,
+        "end_to_end_max_seconds": 1858.455616
+      }
+    },
+    "separate_process_rate_ratio": 0.671,
+    "steady_state": {
+      "agency": "chaos-steady-9f3ead",
+      "target_rate_per_second": 24.748391354562457,
+      "concurrency": 16,
+      "messages": 3000,
+      "publisher": {
+        "requested": 3000,
+        "published": 3000,
+        "batches": 60,
+        "seconds": 122.079,
+        "achieved_per_second": 24.6
+      },
+      "delivered": 3000,
+      "processed": 3000,
+      "follow_up_sweeps": 0,
+      "rows_written": 3000,
+      "wall_seconds": 125.735,
+      "throughput_per_second": 23.9,
+      "latency": {
+        "rows": 3000,
+        "processing_seconds": {
+          "p50": 0.715099,
+          "p95": 1.161288,
+          "p99": 1.342916
+        },
+        "end_to_end_seconds": {
+          "p50": 147.920412,
+          "p95": 197.763142,
+          "p99": 283.951669
+        },
+        "corpus_age_seconds": {
+          "p50": 147.0,
+          "p95": 197.0,
+          "p99": 283.05
+        },
+        "processing_max_seconds": 1.513943,
+        "end_to_end_max_seconds": 1827.857692
+      },
+      "corpus_event_time_span_seconds": 1827.0
+    },
+    "pipeline_ceiling_per_second": 49.5,
+    "first_constraint": "consumer (processor and Postgres)",
+    "legs_per_second": {
+      "publisher and broker": 981.2,
+      "consumer (processor and Postgres)": 49.5
+    }
+  },
+  "notes": [
+    "At the breaking rate the limiter still waited 3.58s, so the harness's publisher_bound flag reads False even though the publisher was the constraint. The flag requires a limiter that barely waited; a bursty publisher produces both waiting and a shortfall, because the token bucket holds only 0.1s of credit and cannot bank the time lost while a batch is in flight.",
+    "Raising the pool from 10 to 30 connections multiplied the drain rate by 1.25x, so the connection pool is the binding constraint on the consumer side.",
+    "That verdict is marginal: 1.25x against a 1.25x bar. Repeat runs on this machine have landed on both sides of it, so the honest reading is that the pool is one contributor among several rather than the constraint.",
+    "A processor in its own process drains 0.67x the rate of the bridge's in-process path at the same concurrency -- slower. Over loopback the HTTP round trip and the JSON envelope cost more than the GIL contention they remove, so the in-process path is the quicker of the two locally. The consumer figures above all use the separate process anyway, because that is the shape production runs in: the processor is its own Cloud Run service.",
+    "The publisher ceiling is measured against the Pub/Sub emulator in a container, not against Pub/Sub. The emulator is a single-process Java service with no quota enforcement and no cross-zone replication, so it is the wrong shape to extrapolate from in either direction.",
+    "Postgres here runs with fsync=off and synchronous_commit=off (docker-compose.yml), so every consumer-side figure above is inflated relative to any deployment whose data matters.",
+    "Timestamps are rebased, which is the harness default: end-to-end lag therefore measures the pipeline plus the age each ping already had when it was captured. Processing latency (ingest_time to processed_time) is the figure that is purely this machine.",
+    "The drain is timed with max_messages set to the backlog's exact size, so the bridge stops on the last message rather than spending a final long poll inside the measured window.",
+    "Latency comes from the steady-state stage, not from the drains. In a backlog drain every message shares one ingest_time, so processed_time - ingest_time reports how long the queue took to empty and grows with the backlog on an identically fast pipeline. The steady-state stage publishes and consumes together below the ceiling, re-stamping each batch as a collector tick would, which is the only arrangement in which that interval is a latency."
+  ]
+}

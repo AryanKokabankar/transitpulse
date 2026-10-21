@@ -13,12 +13,14 @@ traceable end to end across a message broker, every rejection is kept and
 replayable, and the service-level objective is defined, measured and alerted on
 as code.
 
-> **Status: Phase 3 complete.** The pipeline runs end to end locally — feed to
-> broker to Postgres — with one trace spanning the broker, a dashboard whose
-> every panel is verified against a live Prometheus, and the SLO defined and
-> alerted on as rules. Nothing is deployed to GCP yet; Terraform and Cloud
-> Monitoring are Phase 4. See [Roadmap](#roadmap) for exactly what does and
-> does not run today.
+> **Status: Phases 0–3 and 6 complete.** The pipeline runs end to end locally —
+> feed to broker to Postgres — with one trace spanning the broker, a dashboard
+> whose every panel is verified against a live Prometheus, and the SLO defined
+> and alerted on as rules. Five chaos experiments are scripted and repeatable,
+> and every performance figure is measured rather than claimed:
+> [BENCHMARKS.md](BENCHMARKS.md). Nothing is deployed to GCP yet; Terraform and
+> Cloud Monitoring are Phase 4. See [Roadmap](#roadmap) for exactly what does
+> and does not run today.
 
 ---
 
@@ -167,11 +169,16 @@ tools/
   replay/       load harness: replays the corpus at any rate
   pushbridge.py local stand-in for the push subscription
   smoke.py      provokes one of every metric, for dashboard verification
+  chaos/        five scripted failures, each ending in a counted assertion
+  durability.py the same load against fsync=off and fsync=on Postgres
+  screenshots.py dashboard panels as PNGs, verified not to be error images
 infra/terraform/ Pub/Sub, Cloud SQL, BigQuery, Cloud Run, IAM, SLOs
 observability/  collector config, Prometheus config and rules,
                 Grafana dashboards and provisioning (all in git)
 migrations/     hand-written Alembic migrations
 docs/adr/       why things are the way they are
+docs/benchmarks/ raw measurements, written by the runs that made them
+docs/dashboards/ panel screenshots captured during a chaos run
 ```
 
 ---
@@ -228,6 +235,65 @@ python tasks.py replay -- --rate 500 --duration 10s --dry-run   # pacing only
   (default 0.95), so a performance gate can fail a build without parsing
   output. `--json` emits the whole report for the same reason.
 
+## Chaos experiments
+
+Every resilience claim this project makes is a claim about behaviour under a
+fault that does not occur on a healthy day — the queue absorbs a backlog,
+nothing is dropped silently, the breaker stops calling a dead upstream, a
+replay is free. A README can assert all four. The only way to know is to cause
+the fault and count what came out, so each one is a committed script rather
+than a write-up:
+
+```bash
+python tasks.py chaos -- --list
+python tasks.py chaos -- all              # all five, in order
+python -m tools.chaos.kill_processor --messages 2000    # or one at a time
+```
+
+Each run ends in checks, not prose: `expected 2000, measured 2000`. Each writes
+its raw measurements to `docs/benchmarks/<name>.json`, and exits non-zero if any
+check failed, so the set can gate a build. Three rules keep them honest — each
+run invents its own agency so every count is of rows that run created, the
+corpus is filtered to one ping per idempotency key so "zero loss" is a
+reachable assertion rather than a defeat by deduplication, and the result file
+is written by the run itself so the prose can be checked against it.
+
+Two of the five earned their shape by first being wrong. The kill experiment
+originally refused deliveries for eight seconds against a 1,600-message backlog
+and dead-lettered nothing — a refused connection costs about two seconds on
+loopback and the broker hands out fresh messages rather than the same ones, so
+every message collected one refusal and none came near five. It reported zero
+loss while never testing the path that loses data. It now holds back a bounded
+number on purpose and refuses until the subscription has emptied into the
+dead-letter topic, and a check insists that it did.
+
+## Benchmarks
+
+Measured on an Intel Core Ultra 7 155H (16 cores, 15.5 GiB) under Docker
+Desktop, replaying a 7-snapshot MBTA corpus. Every figure names the command
+that produced it, and each run's raw output is committed in `docs/benchmarks/`.
+
+| Question | Measured | From |
+|---|---|---|
+| How fast can it publish? | **981 msg/s** — the Pub/Sub *emulator*'s ceiling, not Pub/Sub's | `chaos ramp` |
+| How fast can it consume? | **~50 events/s** (49.5–58 across four runs), peaking at concurrency 16 | `chaos ramp` |
+| What is the pipeline's ceiling? | **49.5 events/s — consumer-bound, by a factor of 20** | `chaos ramp` |
+| How long does the pipeline take per event? | p50 **0.72 s**, p95 1.16 s, p99 **1.34 s** (`ingest → processed`, steady state) | `chaos ramp` |
+| And end to end? | p50 **147.9 s** — of which **147.0 s** is how old MBTA's own reports already were | `chaos ramp` |
+| Does the harness outrun what it measures? | Yes, 16,014/s with the publish removed — 16× the publisher | `chaos ramp` |
+| Is a backlog lost when the processor dies? | **No. 2,000 published, 2,000 rows** — including 40 recovered from the DLQ | `chaos kill-processor` |
+| Is a bad record ever dropped silently? | **No. 294 published + 73 quarantined = 367 entities**, exactly | `chaos malformed-feed` |
+| Does the breaker really stop calling upstream? | **0 requests reached it while open**, counted at the far end | `chaos feed-failure` |
+| What does replaying a duplicate batch cost? | **0 rows added**, 1,000 counted as deduplicated | `chaos duplicate-batch` |
+| How much is `fsync=off` worth here? | **Nothing resolvable** — a 3.6/s gap against a 6.4/s noise floor | `durability` |
+
+The three caveats that would make any of these misleading quoted alone: the
+local Postgres runs without `fsync`, a rate the limiter was still pacing is not
+a ceiling, and "end-to-end lag" from a replayed corpus includes the age each
+event already had when it was captured. [BENCHMARKS.md](BENCHMARKS.md) states
+all three next to the numbers they qualify, with the methodology and the
+hardware.
+
 ## Observability
 
 Metrics are named so each answers an operational question:
@@ -238,6 +304,7 @@ Metrics are named so each answers an operational question:
 | `transitpulse.events.quarantined` | Is it losing data, and why? |
 | `transitpulse.events.deduped` | How much upstream traffic is repeats? |
 | `transitpulse.events.dead_lettered` | Has anything been lost? |
+| `transitpulse.events.replayed` | Has anything been recovered? |
 | `transitpulse.sink.write.duration` | Which sink is slow? |
 | `transitpulse.processing.duration` | Is the latency ours or upstream's? |
 | `transitpulse.partitions.headroom` | How many days of writes are left? |
@@ -356,13 +423,19 @@ this code.
 - [x] **Phase 1** — collector handler, snapshot archiving, replay harness
 - [x] **Phase 2** — processor handler, enrichment, static GTFS loader
 - [x] **Phase 3** — dashboards and SLO alerting wired end to end
+- [x] **Phase 6** — chaos experiments, DLQ replayer, `BENCHMARKS.md`
 - [ ] **Phase 4** — Terraform, GCP deploy, Workload Identity Federation
 - [ ] **Phase 5** — canary deploys, nightly performance regression gate
-- [ ] **Phase 6** — chaos experiments, `BENCHMARKS.md`
 
-Performance numbers will be published in `BENCHMARKS.md` with methodology and
-hardware, generated by the replay harness in Phase 6. **This README will not
-claim a throughput or latency figure that the harness has not measured.**
+Phase 6 ran ahead of 4 and 5 deliberately: a performance regression gate needs
+a measured baseline to regress against, and there was none.
+
+Every figure in [BENCHMARKS.md](BENCHMARKS.md) names the command that produced
+it, and the raw output of each run is committed beside it in
+`docs/benchmarks/`. **This README does not claim a throughput or latency figure
+that the harness has not measured** — and where a number is bounded by the
+measuring tool, by a limiter, or by a database running without `fsync`, it says
+so next to the number rather than in a footnote.
 
 ---
 

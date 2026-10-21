@@ -110,6 +110,7 @@ class Metrics:
     events_deduped: Counter
     events_published: Counter
     events_dead_lettered: Counter
+    events_replayed: Counter
     feed_fetch_failures: Counter
     inflight_batches: UpDownCounter
     partitions_ensured: Counter
@@ -182,6 +183,10 @@ def build_metrics(meter: Meter) -> Metrics:
         events_dead_lettered=meter.create_counter(
             "transitpulse.events.dead_lettered",
             description="Events whose last delivery attempt was refused, labelled by reason",
+        ),
+        events_replayed=meter.create_counter(
+            "transitpulse.events.replayed",
+            description="Dead-lettered events the replayer put back on the topic",
         ),
         feed_fetch_failures=meter.create_counter(
             "transitpulse.feed.fetch.failures",
