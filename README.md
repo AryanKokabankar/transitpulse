@@ -1,5 +1,7 @@
 # TransitPulse
 
+[![ci](https://github.com/AryanKokabankar/transitpulse/actions/workflows/ci.yml/badge.svg)](https://github.com/AryanKokabankar/transitpulse/actions/workflows/ci.yml)
+
 A cloud-native streaming pipeline for real-time transit telemetry. It ingests
 live [GTFS-Realtime](https://gtfs.org/realtime/reference/) vehicle feeds,
 enriches each position in flight with motion and schedule-adherence data, and
