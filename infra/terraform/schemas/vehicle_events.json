@@ -1,0 +1,126 @@
+[
+  {
+    "name": "idempotency_key",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "blake2b(agency|vehicle_id|event_time). Deduplicate on this (ADR-005)."
+  },
+  {
+    "name": "agency",
+    "type": "STRING",
+    "mode": "REQUIRED"
+  },
+  {
+    "name": "vehicle_id",
+    "type": "STRING",
+    "mode": "REQUIRED"
+  },
+  {
+    "name": "trip_id",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "route_id",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "route_short_name",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "direction_id",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "start_date",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "schedule_relationship",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "latitude",
+    "type": "FLOAT",
+    "mode": "REQUIRED"
+  },
+  {
+    "name": "longitude",
+    "type": "FLOAT",
+    "mode": "REQUIRED"
+  },
+  {
+    "name": "bearing",
+    "type": "FLOAT",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "reported_speed_mps",
+    "type": "FLOAT",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "computed_speed_mps",
+    "type": "FLOAT",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "distance_from_last_m",
+    "type": "FLOAT",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "seconds_since_last_ping",
+    "type": "FLOAT",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "schedule_delay_seconds",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "is_on_time",
+    "type": "BOOLEAN",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "current_stop_sequence",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "stop_id",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "occupancy_status",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "event_time",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "When the vehicle reported the position, per the agency."
+  },
+  {
+    "name": "ingest_time",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "When the collector decoded it."
+  },
+  {
+    "name": "processed_time",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "When the processor finished enriching it."
+  }
+]

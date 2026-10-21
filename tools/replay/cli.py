@@ -17,6 +17,7 @@ import json
 import re
 import sys
 from datetime import timedelta
+from pathlib import Path
 
 import structlog
 
@@ -110,6 +111,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--json", action="store_true", help="emit the report as JSON on stdout")
     parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "write the report as JSON to a file. Prefer this over --json "
+            "anywhere a machine reads the result: structured logs share "
+            "stdout, so piping --json into a parser feeds it log lines first"
+        ),
+    )
+    parser.add_argument(
         "--min-accuracy",
         type=float,
         default=0.95,
@@ -154,6 +166,13 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         if publisher is not None:
             publisher.close()
+
+    if args.output is not None:
+        # Written rather than printed, because the one caller that must be
+        # able to trust this is a performance gate, and stdout already
+        # carries the structured log stream.
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(report.as_dict(), indent=2) + "\n", encoding="utf-8")
 
     if args.json:
         print(json.dumps(report.as_dict(), indent=2))

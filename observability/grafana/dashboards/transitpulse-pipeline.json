@@ -7,20 +7,33 @@
   "editable": true,
   "graphTooltip": 1,
   "refresh": "10s",
-  "time": { "from": "now-30m", "to": "now" },
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
   "timezone": "utc",
-  "tags": ["transitpulse", "slo", "pipeline"],
+  "tags": [
+    "transitpulse",
+    "slo",
+    "pipeline"
+  ],
   "templating": {
     "list": [
       {
         "name": "agency",
         "label": "Agency",
         "type": "query",
-        "datasource": { "type": "prometheus", "uid": "Prometheus" },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "Prometheus"
+        },
         "query": "label_values(transitpulse_events_processed_total, agency)",
         "includeAll": true,
         "multi": true,
-        "current": { "text": "All", "value": "$__all" },
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
         "refresh": 2
       }
     ]
@@ -31,7 +44,10 @@
         "name": "Process starts",
         "enable": true,
         "iconColor": "#898781",
-        "datasource": { "type": "prometheus", "uid": "Prometheus" },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "Prometheus"
+        },
         "expr": "min by (service_name) (time() - transitpulse_service_start_timestamp_seconds) < 120"
       }
     ]
@@ -40,7 +56,12 @@
     {
       "type": "row",
       "title": "Service level",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
       "collapsed": false,
       "panels": []
     },
@@ -49,8 +70,16 @@
       "type": "stat",
       "title": "SLO compliance - events processed within 2s",
       "description": "Share of events whose end-to-end lag (processed_time - event_time) fell inside the 2s objective. This is the number the project is judged on.",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
       "targets": [
         {
           "refId": "A",
@@ -65,13 +94,24 @@
           "decimals": 2,
           "min": 90,
           "max": 100,
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "#d03b3b", "value": null },
-              { "color": "#fab219", "value": 95 },
-              { "color": "#0ca30c", "value": 99 }
+              {
+                "color": "#d03b3b",
+                "value": null
+              },
+              {
+                "color": "#fab219",
+                "value": 95
+              },
+              {
+                "color": "#0ca30c",
+                "value": 99
+              }
             ]
           }
         },
@@ -82,7 +122,13 @@
         "colorMode": "value",
         "textMode": "value_and_name",
         "justifyMode": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
       }
     },
     {
@@ -90,8 +136,16 @@
       "type": "stat",
       "title": "Ingest lag p95",
       "description": "95th percentile end-to-end lag over the last 5 minutes.",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 1 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
       "targets": [
         {
           "refId": "A",
@@ -104,14 +158,28 @@
         "defaults": {
           "unit": "s",
           "decimals": 2,
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "#0ca30c", "value": null },
-              { "color": "#fab219", "value": 2 },
-              { "color": "#ec835a", "value": 5 },
-              { "color": "#d03b3b", "value": 30 }
+              {
+                "color": "#0ca30c",
+                "value": null
+              },
+              {
+                "color": "#fab219",
+                "value": 2
+              },
+              {
+                "color": "#ec835a",
+                "value": 5
+              },
+              {
+                "color": "#d03b3b",
+                "value": 30
+              }
             ]
           }
         },
@@ -121,7 +189,13 @@
         "graphMode": "area",
         "colorMode": "value",
         "textMode": "value_and_name",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
       }
     },
     {
@@ -129,8 +203,16 @@
       "type": "stat",
       "title": "Throughput",
       "description": "Events written to all enabled sinks, per second.",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 1 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
       "targets": [
         {
           "refId": "A",
@@ -143,7 +225,10 @@
         "defaults": {
           "unit": "ops",
           "decimals": 0,
-          "color": { "mode": "fixed", "fixedColor": "#2a78d6" }
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#2a78d6"
+          }
         },
         "overrides": []
       },
@@ -151,7 +236,13 @@
         "graphMode": "area",
         "colorMode": "none",
         "textMode": "value_and_name",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
       }
     },
     {
@@ -159,8 +250,16 @@
       "type": "stat",
       "title": "Events dead-lettered (10m)",
       "description": "Events that exhausted all five delivery attempts and could not be quarantined either, so only the DLQ holds them. Was a broker-side depth gauge, which no process in this repo could observe - see ADR-007. Any non-zero value is a durability failure, so the threshold is red at one rather than at a hundred.",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
       "targets": [
         {
           "refId": "A",
@@ -173,12 +272,20 @@
         "defaults": {
           "unit": "short",
           "decimals": 0,
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "#0ca30c", "value": null },
-              { "color": "#d03b3b", "value": 1 }
+              {
+                "color": "#0ca30c",
+                "value": null
+              },
+              {
+                "color": "#d03b3b",
+                "value": 1
+              }
             ]
           }
         },
@@ -188,7 +295,13 @@
         "graphMode": "none",
         "colorMode": "value",
         "textMode": "value_and_name",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
       }
     },
     {
@@ -196,8 +309,16 @@
       "type": "timeseries",
       "title": "Error budget burn rate",
       "description": "Multiples of the sustainable spend of the 1% error budget. 1x exhausts a 30-day budget in exactly 30 days; the dashed lines are the two rates that page. Both series are the same quantity over different windows - an ordered family, so one blue ramp light-to-dark with the short window light, rather than two unrelated hues.",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 6 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
       "targets": [
         {
           "refId": "A",
@@ -225,37 +346,86 @@
             "spanNulls": false,
             "axisGridShow": true,
             "axisSoftMax": 16,
-            "thresholdsStyle": { "mode": "dashed" }
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
           },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "transparent", "value": null },
-              { "color": "#fab219", "value": 6 },
-              { "color": "#d03b3b", "value": 14.4 }
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "#fab219",
+                "value": 6
+              },
+              {
+                "color": "#d03b3b",
+                "value": 14.4
+              }
             ]
           }
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "1h window" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#86b6ef" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "1h window"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#86b6ef"
+                }
+              }
+            ]
           },
           {
-            "matcher": { "id": "byName", "options": "6h window" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#104281" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "6h window"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#104281"
+                }
+              }
+            ]
           }
         ]
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull", "max"] },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
     {
       "type": "row",
       "title": "Latency",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
       "collapsed": false,
       "panels": []
     },
@@ -264,8 +434,16 @@
       "type": "timeseries",
       "title": "Ingest lag percentiles",
       "description": "p50 / p95 / p99 of processed_time - event_time. One blue ramp light-to-dark because these are ordered magnitudes of the same measure, not independent series. The dashed 2s line is the objective.",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 14 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
       "targets": [
         {
           "refId": "A",
@@ -303,27 +481,76 @@
           },
           "thresholds": {
             "mode": "absolute",
-            "steps": [{ "color": "transparent", "value": null }]
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              }
+            ]
           }
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "p50" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#86b6ef" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "p50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#86b6ef"
+                }
+              }
+            ]
           },
           {
-            "matcher": { "id": "byName", "options": "p95" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#2a78d6" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "p95"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2a78d6"
+                }
+              }
+            ]
           },
           {
-            "matcher": { "id": "byName", "options": "p99" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#104281" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "p99"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#104281"
+                }
+              }
+            ]
           }
         ]
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull", "max"] },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
     {
@@ -331,8 +558,16 @@
       "type": "timeseries",
       "title": "Sink write latency p95",
       "description": "Per-sink write latency. Postgres is the synchronous serving write; BigQuery is the batched append. Two independent sinks, so categorical slots 1 and 2.",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 14 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
       "targets": [
         {
           "refId": "A",
@@ -357,24 +592,61 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "postgres" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#2a78d6" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "postgres"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2a78d6"
+                }
+              }
+            ]
           },
           {
-            "matcher": { "id": "byName", "options": "bigquery" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#eb6834" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "bigquery"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#eb6834"
+                }
+              }
+            ]
           }
         ]
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull"] },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
     {
       "type": "row",
       "title": "Data quality",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
       "collapsed": false,
       "panels": []
     },
@@ -382,16 +654,24 @@
       "id": 7,
       "type": "barchart",
       "title": "Quarantined events by reason",
-      "description": "Events the pipeline refused, split by why. Categorical identity, so hues are assigned in fixed palette order and a reason keeps its color even when others drop out of the window.",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 24 },
+      "description": "Events the pipeline refused, split by why. An instant query, so this is one bar per reason rather than one per scrape -- asked for a range, a bar chart draws a bar per timestamp and becomes unreadable. Categorical identity, so each reason's hue is pinned by a value mapping and survives other reasons dropping out of the window.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
       "targets": [
         {
           "refId": "A",
           "editorMode": "code",
           "expr": "sum by (reason) (increase(transitpulse_events_quarantined_total[5m]))",
-          "legendFormat": "{{reason}}",
-          "format": "time_series"
+          "format": "table",
+          "instant": true
         }
       ],
       "fieldConfig": {
@@ -408,51 +688,107 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "SCHEMA_VALIDATION" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#2a78d6" } }]
-          },
-          {
-            "matcher": { "id": "byName", "options": "DECODE_FAILURE" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#eb6834" } }]
-          },
-          {
-            "matcher": { "id": "byName", "options": "NULL_ISLAND" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#1baf7a" } }]
-          },
-          {
-            "matcher": { "id": "byName", "options": "IMPOSSIBLE_SPEED" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#eda100" } }]
-          },
-          {
-            "matcher": { "id": "byName", "options": "STALE_EVENT" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#e87ba4" } }]
-          },
-          {
-            "matcher": { "id": "byName", "options": "UNKNOWN_ROUTE" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#008300" } }]
-          },
-          {
-            "matcher": { "id": "byName", "options": "SINK_WRITE_FAILURE" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#4a3aa7" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "reason"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "SCHEMA_VALIDATION": {
+                        "color": "#2a78d6",
+                        "index": 0,
+                        "text": "SCHEMA_VALIDATION"
+                      },
+                      "DECODE_FAILURE": {
+                        "color": "#eb6834",
+                        "index": 1,
+                        "text": "DECODE_FAILURE"
+                      },
+                      "NULL_ISLAND": {
+                        "color": "#1baf7a",
+                        "index": 2,
+                        "text": "NULL_ISLAND"
+                      },
+                      "IMPOSSIBLE_SPEED": {
+                        "color": "#eda100",
+                        "index": 3,
+                        "text": "IMPOSSIBLE_SPEED"
+                      },
+                      "STALE_EVENT": {
+                        "color": "#e87ba4",
+                        "index": 4,
+                        "text": "STALE_EVENT"
+                      },
+                      "UNKNOWN_ROUTE": {
+                        "color": "#008300",
+                        "index": 5,
+                        "text": "UNKNOWN_ROUTE"
+                      },
+                      "SINK_WRITE_FAILURE": {
+                        "color": "#4a3aa7",
+                        "index": 6,
+                        "text": "SINK_WRITE_FAILURE"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
           }
         ]
       },
       "options": {
         "orientation": "horizontal",
-        "showValue": "auto",
+        "showValue": "always",
         "stacking": "none",
         "xTickLabelRotation": 0,
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "single", "sort": "none" }
-      }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "xField": "reason",
+        "colorByField": "reason"
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {},
+            "renameByName": {
+              "Value": "events"
+            }
+          }
+        }
+      ]
     },
     {
       "id": 8,
       "type": "timeseries",
       "title": "Delivery outcome rate",
       "description": "Processed, deduplicated and quarantined events per second. Deduplicated is a success - the agency re-sending a ping it already sent is normal traffic, not loss - so it is tracked separately from quarantine.",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 24 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
       "targets": [
         {
           "refId": "A",
@@ -488,28 +824,76 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "processed" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#2a78d6" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "processed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2a78d6"
+                }
+              }
+            ]
           },
           {
-            "matcher": { "id": "byName", "options": "deduplicated" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#1baf7a" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "deduplicated"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#1baf7a"
+                }
+              }
+            ]
           },
           {
-            "matcher": { "id": "byName", "options": "quarantined" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#eb6834" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "quarantined"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#eb6834"
+                }
+              }
+            ]
           }
         ]
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull"] },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
     {
       "type": "row",
       "title": "Upstream and internals",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 33 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
       "collapsed": false,
       "panels": []
     },
@@ -518,8 +902,16 @@
       "type": "timeseries",
       "title": "Upstream feed fetch p95",
       "description": "How long the agency takes to answer. Single series, so the title names it and no legend box is needed.",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 34 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 34
+      },
       "targets": [
         {
           "refId": "A",
@@ -533,14 +925,27 @@
           "unit": "s",
           "decimals": 2,
           "min": 0,
-          "color": { "mode": "fixed", "fixedColor": "#2a78d6" },
-          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "showPoints": "never" }
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#2a78d6"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never"
+          }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "showLegend": false },
-        "tooltip": { "mode": "single", "sort": "none" }
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
       }
     },
     {
@@ -548,8 +953,16 @@
       "type": "timeseries",
       "title": "Upstream feed failures",
       "description": "Fetch errors by kind. Rising values here with flat quarantine means the circuit breaker is doing its job.",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 34 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 34
+      },
       "targets": [
         {
           "refId": "A",
@@ -563,26 +976,71 @@
           "unit": "ops",
           "decimals": 2,
           "min": 0,
-          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "showPoints": "never" }
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never"
+          }
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "timeout" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#2a78d6" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "timeout"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2a78d6"
+                }
+              }
+            ]
           },
           {
-            "matcher": { "id": "byName", "options": "http_error" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#eb6834" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "http_error"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#eb6834"
+                }
+              }
+            ]
           },
           {
-            "matcher": { "id": "byName", "options": "decode_error" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#1baf7a" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "decode_error"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#1baf7a"
+                }
+              }
+            ]
           }
         ]
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     },
     {
@@ -590,8 +1048,16 @@
       "type": "timeseries",
       "title": "Processor handler duration p99",
       "description": "Time inside the processor itself, excluding broker and network. Compare against ingest lag to see whether latency is ours or upstream's.",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 34 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 34
+      },
       "targets": [
         {
           "refId": "A",
@@ -605,20 +1071,38 @@
           "unit": "s",
           "decimals": 3,
           "min": 0,
-          "color": { "mode": "fixed", "fixedColor": "#2a78d6" },
-          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "showPoints": "never" }
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#2a78d6"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never"
+          }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "showLegend": false },
-        "tooltip": { "mode": "single", "sort": "none" }
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
       }
     },
     {
       "type": "row",
       "title": "Capacity and scheduled jobs",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 42 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      },
       "collapsed": false,
       "panels": []
     },
@@ -627,8 +1111,16 @@
       "type": "stat",
       "title": "Partition headroom (days)",
       "description": "Unbroken days of vehicle_events partitions from today onward. Partitioning does not degrade when it runs out - it refuses the insert - so this is write capacity, not disk. Zero means tomorrow is rejected; -1 means today already is. Status palette, red below the three-day threshold the alert pages on.",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 43 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 43
+      },
       "targets": [
         {
           "refId": "A",
@@ -641,13 +1133,24 @@
         "defaults": {
           "unit": "short",
           "decimals": 0,
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "#d03b3b", "value": null },
-              { "color": "#fab219", "value": 3 },
-              { "color": "#0ca30c", "value": 7 }
+              {
+                "color": "#d03b3b",
+                "value": null
+              },
+              {
+                "color": "#fab219",
+                "value": 3
+              },
+              {
+                "color": "#0ca30c",
+                "value": 7
+              }
             ]
           }
         },
@@ -657,7 +1160,13 @@
         "graphMode": "area",
         "colorMode": "value",
         "textMode": "value_and_name",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
       }
     },
     {
@@ -665,8 +1174,16 @@
       "type": "stat",
       "title": "Time since each job last succeeded",
       "description": "Age of the last successful run, per job. This is the signal that would have caught the partition outage a fortnight before the headroom did: a job that stopped being triggered produces no failures to notice, only an absence. Amber at 26h, which is a daily schedule plus slack.",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 6, "w": 9, "x": 6, "y": 43 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 9,
+        "x": 6,
+        "y": 43
+      },
       "targets": [
         {
           "refId": "A",
@@ -679,13 +1196,24 @@
         "defaults": {
           "unit": "s",
           "decimals": 0,
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "#0ca30c", "value": null },
-              { "color": "#fab219", "value": 93600 },
-              { "color": "#d03b3b", "value": 172800 }
+              {
+                "color": "#0ca30c",
+                "value": null
+              },
+              {
+                "color": "#fab219",
+                "value": 93600
+              },
+              {
+                "color": "#d03b3b",
+                "value": 172800
+              }
             ]
           }
         },
@@ -696,7 +1224,13 @@
         "colorMode": "value",
         "textMode": "value_and_name",
         "justifyMode": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
       }
     },
     {
@@ -704,8 +1238,16 @@
       "type": "timeseries",
       "title": "Partitions ensured and dropped",
       "description": "What the maintenance job did, over the last hour. Created and dropped are independent outcomes rather than magnitudes of one measure, so they take categorical slots 1 and 2 in fixed order. Both sitting at zero is the healthy steady state, which is why the counters are declared at zero rather than created on first use.",
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
-      "gridPos": { "h": 6, "w": 9, "x": 15, "y": 43 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 9,
+        "x": 15,
+        "y": 43
+      },
       "targets": [
         {
           "refId": "A",
@@ -736,18 +1278,50 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "ensured" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#2a78d6" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "ensured"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2a78d6"
+                }
+              }
+            ]
           },
           {
-            "matcher": { "id": "byName", "options": "dropped" },
-            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#eb6834" } }]
+            "matcher": {
+              "id": "byName",
+              "options": "dropped"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#eb6834"
+                }
+              }
+            ]
           }
         ]
       },
       "options": {
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull"] },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     }
   ]

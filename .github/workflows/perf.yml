@@ -1,0 +1,188 @@
+# Nightly performance and resilience gate.
+#
+# Phase 6 measured this pipeline for the first time, which is what makes a
+# regression gate possible at all: there was previously nothing to regress
+# against. This runs the same harness and the same chaos experiments on a
+# schedule, so a change that halves the throughput or quietly breaks the
+# zero-loss property is caught by the build rather than by the next person to
+# run a benchmark.
+#
+# **The thresholds here are floors, not targets, and they are deliberately
+# generous.** GitHub-hosted runners are shared vCPUs with neighbours, and the
+# local numbers in BENCHMARKS.md were measured on a dedicated laptop; the two
+# are not comparable and a tight bound would flake nightly until someone
+# switched the job off, which is worse than no gate. What this catches is an
+# order-of-magnitude regression, and the measured values are uploaded as
+# artifacts so real drift is visible over time even while every run passes.
+#
+# The correctness half is not timing-dependent at all. The chaos experiments
+# assert counted properties -- rows written equals events published, injected
+# corruptions equals rejections recorded, duplicates add no rows -- and those
+# are as strict here as on a laptop.
+
+name: perf
+
+on:
+  schedule:
+    # 04:30 UTC, which is outside both US working days and the MBTA's busiest
+    # hours, so the captured corpus is a quiet-period one night to the next.
+    - cron: "30 4 * * *"
+  workflow_dispatch:
+    inputs:
+      rate:
+        description: "Target publish rate for the replay gate"
+        default: "300"
+      min_accuracy:
+        description: "Achieved/target floor below which the gate fails"
+        default: "0.80"
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  perf:
+    name: throughput + chaos
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: transitpulse
+          POSTGRES_PASSWORD: transitpulse
+          POSTGRES_DB: transitpulse
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U transitpulse"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TP_ENV: local
+      TP_PG_DSN: postgresql://transitpulse:transitpulse@localhost:5432/transitpulse
+      PUBSUB_EMULATOR_HOST: localhost:8085
+      TP_GCP_PROJECT: transitpulse-perf
+      TP_OTEL_ENABLED: "false"
+      TP_SNAPSHOT_BACKEND: local
+      TP_SNAPSHOT_LOCAL_DIR: ./replay-corpus
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Start the Pub/Sub emulator
+        # Not a `services:` entry: that block cannot override a container's
+        # command, and the emulator image needs `gcloud beta emulators
+        # pubsub start`. Started fresh here for a second reason the local
+        # measurements turned up -- the emulator keeps every published
+        # message in memory and its publish throughput degrades as it
+        # accumulates state, so a long-lived one would make the gate drift
+        # downwards for reasons that have nothing to do with this code.
+        run: |
+          docker run -d --name pubsub-emulator -p 8085:8085 \
+            gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators \
+            gcloud beta emulators pubsub start --host-port=0.0.0.0:8085 \
+            --project=transitpulse-perf
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8085/ >/dev/null; then echo ready; break; fi
+            sleep 2
+          done
+
+      - name: Apply the schema and the topology
+        run: |
+          python -m alembic upgrade head
+          python -m services.jobs.partition_maintenance
+          python -c "from transitpulse_core.pubsub import ensure_local_topology; ensure_local_topology()"
+
+      - name: Capture a corpus
+        # From the live MBTA feed, which needs no API key. A nightly job may
+        # legitimately fail on an agency outage, so it is retried; what it
+        # must not do is fall back to synthetic load, because then a quiet
+        # failure would change what is being measured without saying so
+        # (ADR-006).
+        run: |
+          for attempt in 1 2 3; do
+            if python -m tools.capture --count 4 --interval 15; then
+              exit 0
+            fi
+            echo "capture attempt $attempt failed; retrying in 30s"
+            sleep 30
+          done
+          echo "::error::could not capture a corpus from the upstream feed after 3 attempts"
+          exit 1
+
+      - name: Pacing accuracy, with no broker in the way
+        # First, because every figure after it is bounded by it: a throughput
+        # measured above the rate the harness can generate is a figure about
+        # the harness. --dry-run exists for exactly this question.
+        #
+        # --output rather than --json piped to a file: structured logs share
+        # stdout, so a redirect captures log lines above the JSON and the
+        # parser chokes on the first one.
+        run: |
+          mkdir -p perf
+          python -m tools.replay \
+            --rate "${{ github.event.inputs.rate || '300' }}" \
+            --duration 15s --dry-run --min-accuracy 0.95 \
+            --output perf/pacing.json
+
+      - name: Publish throughput gate
+        run: |
+          python -m tools.replay \
+            --rate "${{ github.event.inputs.rate || '300' }}" \
+            --duration 20s --fanout 4 \
+            --min-accuracy "${{ github.event.inputs.min_accuracy || '0.80' }}" \
+            --output perf/publish.json
+
+      - name: Drain the backlog that gate left behind
+        # So the chaos experiments below start against an empty subscription
+        # rather than inheriting a few thousand messages and counting them.
+        run: |
+          python -c "
+          from tools.chaos.support import drain_subscriptions
+          from transitpulse_core.config import get_settings
+          print('drained:', drain_subscriptions(get_settings()))
+          "
+
+      - name: Chaos — the counted properties
+        # These assert row counts and rejection counts, not timings, so they
+        # are exactly as strict on a shared runner as on a laptop. The ramp is
+        # left out: it is the long one, and its conclusions are about this
+        # machine rather than about the code.
+        #
+        # Each scenario writes docs/benchmarks/<name>.json itself and exits
+        # non-zero if any check failed, so there is nothing to parse out of
+        # stdout here either.
+        run: |
+          python -m tools.chaos.duplicate_batch --messages 400
+          python -m tools.chaos.malformed_feed
+          python -m tools.chaos.feed_failure
+          python -m tools.chaos.kill_processor --messages 400 --leave-unconsumed 20
+
+      - name: Summarise
+        if: always()
+        run: python -m tools.perf_summary --out "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: perf-results
+          path: |
+            perf/*.json
+            docs/benchmarks/*.json
+          retention-days: 90

@@ -172,7 +172,8 @@ tools/
   chaos/        five scripted failures, each ending in a counted assertion
   durability.py the same load against fsync=off and fsync=on Postgres
   screenshots.py dashboard panels as PNGs, verified not to be error images
-infra/terraform/ Pub/Sub, Cloud SQL, BigQuery, Cloud Run, IAM, SLOs
+infra/terraform/ Pub/Sub, Cloud SQL, BigQuery, Cloud Run, IAM, WIF, SLOs,
+                canary traffic splitting (validated, never applied)
 observability/  collector config, Prometheus config and rules,
                 Grafana dashboards and provisioning (all in git)
 migrations/     hand-written Alembic migrations
@@ -424,11 +425,25 @@ this code.
 - [x] **Phase 2** — processor handler, enrichment, static GTFS loader
 - [x] **Phase 3** — dashboards and SLO alerting wired end to end
 - [x] **Phase 6** — chaos experiments, DLQ replayer, `BENCHMARKS.md`
-- [ ] **Phase 4** — Terraform, GCP deploy, Workload Identity Federation
-- [ ] **Phase 5** — canary deploys, nightly performance regression gate
+- [x] **Phase 4** — Terraform, Workload Identity Federation — *written and
+      validated, never applied*
+- [x] **Phase 5** — canary releases, nightly performance regression gate
 
 Phase 6 ran ahead of 4 and 5 deliberately: a performance regression gate needs
 a measured baseline to regress against, and there was none.
+
+**Phases 4 and 5 are the one place this project cannot show its working.**
+There is no GCP project behind this repository and no spend budget, so the
+infrastructure has never been through `terraform apply`. It is `fmt`-checked,
+initialised against the real providers and `validate`-d on every push — which
+caught a dependency cycle between the push subscription and the Cloud Run
+service it delivers to — but validation cannot see a quota, an org policy, or
+a field the API only rejects at apply time. The deploy workflow is
+`workflow_dispatch` only for the same reason: an automatic trigger would fail
+on every push and teach the reader to ignore a red badge.
+[`infra/terraform/README.md`](infra/terraform/README.md) says what that does
+and does not establish; [ADR-008](docs/adr/008-deploy-without-keys-and-release-without-rebuilding.md)
+covers the keyless auth and the canary.
 
 Every figure in [BENCHMARKS.md](BENCHMARKS.md) names the command that produced
 it, and the raw output of each run is committed beside it in

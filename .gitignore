@@ -22,7 +22,10 @@ service-account*.json
 *.tfstate.*
 *.tfvars
 !*.tfvars.example
-.terraform.lock.hcl
+# .terraform.lock.hcl is deliberately NOT ignored. It pins the exact provider
+# versions and their checksums, which is what makes two people -- or a laptop
+# and CI -- resolve the same providers. Ignoring it is a common default and
+# the wrong one for a configuration that is applied from more than one place.
 
 # local data
 data/

@@ -1,0 +1,125 @@
+# Build, push and release.
+#
+# **Manual only.** There is no GCP project behind this repository, so an
+# automatic trigger would be a workflow that fails on every push and teaches
+# the reader to ignore a red badge. It is written to be correct and wired to
+# be explicit; `workflow_dispatch` is the honest trigger for something that
+# has never run.
+#
+# No service-account key anywhere. Authentication is Workload Identity
+# Federation: GitHub's own OIDC token is exchanged for a short-lived GCP
+# token, scoped by an attribute condition to this repository (infra/terraform/wif.tf).
+#
+# Deploying and releasing are separate, which is the whole point of the canary
+# (infra/terraform/canary.tf):
+#
+#   1. `deploy` builds the image, pushes it by digest, and applies Terraform
+#      with canary_percent=0 -- the new revision exists, is healthy, and
+#      receives nothing.
+#   2. `promote`, run again with a percent, moves traffic to it.
+#   3. Rolling back is `promote` with 0. No rebuild, because the previous
+#      revision was never replaced.
+
+name: deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        type: choice
+        options: [dev, prod]
+        default: dev
+      canary_percent:
+        description: "Share of processor traffic for the new revision (0 deploys without releasing)"
+        default: "0"
+      stable_revision:
+        description: "Revision keeping the remaining traffic; blank on a first deploy"
+        default: ""
+
+permissions:
+  contents: read
+  # Required for the OIDC token Workload Identity Federation exchanges.
+  # Without it `auth` fails with a message about the token endpoint rather
+  # than about permissions.
+  id-token: write
+
+env:
+  PYTHON_VERSION: "3.12"
+  TF_VERSION: "1.9.8"
+
+jobs:
+  deploy:
+    name: build, push, apply
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Authenticate to Artifact Registry
+        run: gcloud auth configure-docker "${{ vars.REGION }}-docker.pkg.dev" --quiet
+
+      - name: Build and push
+        id: build
+        # Pushed and then read back by digest rather than deployed by tag. A
+        # mutable tag means the revision Terraform creates is not necessarily
+        # the image that was tested, and a rollback would re-pull whatever
+        # that tag points at today.
+        run: |
+          REPO="${{ vars.REGION }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/transitpulse-${{ github.event.inputs.environment }}"
+          docker build -t "$REPO/transitpulse:${{ github.sha }}" .
+          docker push "$REPO/transitpulse:${{ github.sha }}"
+          DIGEST=$(gcloud artifacts docker images describe \
+            "$REPO/transitpulse:${{ github.sha }}" --format='value(image_summary.digest)')
+          echo "image=$REPO/transitpulse@$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "Deploying $REPO/transitpulse@$DIGEST"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform apply
+        working-directory: infra/terraform
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+          terraform apply -auto-approve -input=false \
+            -var="project_id=${{ vars.PROJECT_ID }}" \
+            -var="region=${{ vars.REGION }}" \
+            -var="environment=${{ github.event.inputs.environment }}" \
+            -var="image=${{ steps.build.outputs.image }}" \
+            -var="canary_percent=${{ github.event.inputs.canary_percent }}" \
+            -var="stable_revision=${{ github.event.inputs.stable_revision }}"
+
+      - name: Apply database migrations
+        working-directory: infra/terraform
+        # After the infrastructure and before any traffic moves. Migrations in
+        # this project are written to be backward compatible with the running
+        # revision for exactly this reason: during a canary, two revisions are
+        # serving the same database.
+        run: |
+          gcloud run jobs execute "tp-migrate-${{ github.event.inputs.environment }}" \
+            --region "${{ vars.REGION }}" --wait || \
+            echo "::warning::no migration job is provisioned; apply migrations before promoting"
+
+      - name: Report where traffic is going
+        working-directory: infra/terraform
+        run: |
+          echo "### Deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          terraform output -raw serving_traffic >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo "revision: $(terraform output -raw processor_revision)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Promote by re-running this workflow with a percent and" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`stable_revision=$(terraform output -raw processor_revision)\`." >> "$GITHUB_STEP_SUMMARY"

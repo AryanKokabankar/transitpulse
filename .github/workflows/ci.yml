@@ -71,6 +71,36 @@ jobs:
           path: coverage.xml
           retention-days: 7
 
+  terraform:
+    name: terraform validate
+    runs-on: ubuntu-latest
+    # The infrastructure has never been applied -- there is no GCP project
+    # behind this repository -- so `validate` is the only check available and
+    # therefore the one that has to run. It is not a formality: the first
+    # version of this configuration had a dependency cycle between the push
+    # subscription and the Cloud Run service it delivers to, which validate
+    # caught and no amount of reading would have.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: fmt
+        working-directory: infra/terraform
+        run: terraform fmt -check -recursive -diff
+
+      - name: init
+        working-directory: infra/terraform
+        # -backend=false: initialising the real GCS backend would need
+        # credentials, and nothing here needs state to be type-checked.
+        run: terraform init -backend=false -input=false
+
+      - name: validate
+        working-directory: infra/terraform
+        run: terraform validate
+
   integration:
     name: integration tests
     runs-on: ubuntu-latest

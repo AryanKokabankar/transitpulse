@@ -560,14 +560,22 @@ repository where the evidence should be. So the renderer is a profiled compose
 service, and every capture is checked against the placeholder's fixed 478×208
 before the file is written.
 
-Two honest limitations:
+**One panel had to be fixed to be worth capturing.**
+`Quarantined events by reason` asked Prometheus for a *time series* and handed
+it to a bar chart. A bar chart wants one value per category; given a range it
+draws one bar per timestamp per series, which at these windows was several
+hundred bars and a solid wall of axis labels. It rendered, it was not empty,
+and **both dashboard tests passed** — they check that a panel queries a real
+series and selects something, not that a human can read the result. Taking the
+screenshot is what surfaced it, which is a reasonable argument for committing
+screenshots at all.
 
-- **`quarantined-by-reason.png` is close to unreadable.** The barchart renders,
-  and the data behind it is real, but at the series cardinality these runs
-  produce it is a wall of overlapping labels. That is a dashboard problem this
-  phase surfaced rather than one it fixed — the panel passes both dashboard
-  tests, because those check that it queries a real series and selects
-  something, not that it is legible.
-- The captures were taken after the benchmark runs rather than during a chaos
-  run, so the short-window rate panels show the tail of that activity rather
-  than a fault in progress.
+It is now an instant query returning a table, one row per reason, with the
+fixed per-reason hues moved into value mappings so a reason keeps its colour
+when others drop out of the window. The captured panel shows
+`SCHEMA_VALIDATION 57` and `NULL_ISLAND 28` against an injection of 48 and 25
+respectively, the remainder being the decode calls the experiment itself makes.
+
+*Caveat:* the captures were taken just after the runs that produced the signal
+rather than mid-fault, so the short-window rate panels show the tail of that
+activity rather than a failure in progress.
